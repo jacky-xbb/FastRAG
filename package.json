@@ -8,6 +8,7 @@
     "ingest": "tsx src/ingest.ts",
     "ocr": "tsx src/ocr.ts",
     "ask": "tsx src/ask.ts",
+    "web": "tsx src/web.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
