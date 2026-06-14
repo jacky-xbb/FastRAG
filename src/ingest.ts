@@ -56,10 +56,12 @@ async function chunkOne(pdfPath: string, ocr: boolean): Promise<IndicatorChunk[]
   return records
 }
 
-/** 把全部块算向量后 upsert（分批，避免单次 embed 输入过多）。 */
-async function ingestRecords(records: IndicatorChunk[]) {
-  await libsqlVector.createIndex({ indexName: INDEX_NAME, dimension: EMBED_DIMENSION })
-  console.log(`[ingest] 计算向量（${records.length} 块，OpenRouter / text-embedding-3-small）...`)
+/**
+ * 把一份标准的块算向量后 upsert（分批，避免单次 embed 输入过多）。
+ * id 用 `${文件名}#${序号}` 稳定标识：同份标准重跑 --all 时按 id 覆盖、不重复入库，
+ * 故失败份补跑后无须先删库（OCR 缓存 + id 幂等 = 真·增量续跑）。
+ */
+async function upsertRecords(records: IndicatorChunk[]) {
   for (let i = 0; i < records.length; i += EMBED_BATCH) {
     const batch = records.slice(i, i + EMBED_BATCH)
     const { embeddings } = await embedMany({ model: embedModel, values: batch.map((r) => r.text) })
@@ -68,28 +70,46 @@ async function ingestRecords(records: IndicatorChunk[]) {
       indexName: INDEX_NAME,
       vectors: embeddings,
       metadata: batch.map((r) => ({ text: r.text, ...r.metadata })),
+      ids: batch.map((r, j) => `${r.metadata.fileName}#${i + j}`),
     })
-    console.log(`[ingest] 已入库 ${Math.min(i + EMBED_BATCH, records.length)}/${records.length}`)
   }
 }
 
 async function main() {
   const args = process.argv.slice(2)
-  let records: IndicatorChunk[] = []
+  await libsqlVector.createIndex({ indexName: INDEX_NAME, dimension: EMBED_DIMENSION })
 
   if (args.includes('--all')) {
     const files = (await readdir(PDF_DIR)).filter((f) => /\.pdf$/i.test(f)).sort()
     console.log(`[ingest] 全量入库 ${files.length} 份标准`)
+    const failed: string[] = []
+    let okCount = 0
+    let totalChunks = 0
+    // 逐份 OCR→切块→入库：单份失败（如 PaddleOCR 限流「队列已满」）只跳过该份并续跑，
+    // 已入库的份不回滚；补跑 --all 时 OCR 缓存命中 + id 幂等覆盖，不重复付费/不重复入库。
     for (const f of files) {
-      records.push(...(await chunkOne(join(PDF_DIR, f), f !== TEXT_LAYER_PDF)))
+      try {
+        const records = await chunkOne(join(PDF_DIR, f), f !== TEXT_LAYER_PDF)
+        await upsertRecords(records)
+        okCount++
+        totalChunks += records.length
+      } catch (err) {
+        console.error(`[ingest] ✗ 跳过 ${f}：${(err as Error).message}`)
+        failed.push(f)
+      }
     }
-  } else {
-    const ocr = args.includes('--ocr')
-    const pdfPath = args.find((a) => !a.startsWith('--')) ?? DEFAULT_PDF
-    records = await chunkOne(pdfPath, ocr)
+    console.log(`[ingest] 全量完成：成功 ${okCount}/${files.length} 份，共 ${totalChunks} 块`)
+    if (failed.length) {
+      console.log(`[ingest] 失败 ${failed.length} 份（重跑 npm run ingest -- --all 增量续跑）：`)
+      for (const f of failed) console.log(`  - ${f}`)
+    }
+    return
   }
 
-  await ingestRecords(records)
+  const ocr = args.includes('--ocr')
+  const pdfPath = args.find((a) => !a.startsWith('--')) ?? DEFAULT_PDF
+  const records = await chunkOne(pdfPath, ocr)
+  await upsertRecords(records)
   console.log(`[ingest] 完成：${records.length} 块已入库到索引 "${INDEX_NAME}"`)
 }
 
