@@ -14,7 +14,12 @@
 每块前缀 = `标准号 + 表名 + 指标名`，裸数字带着列头（如 `P=600; PY=800; R=350`）进向量空间（[ADR-0004](docs/adr/0004-indicator-chunking-hybrid-retrieval.md)）。
 每块带元数据 `{标准号, 表名, 指标名, 页码, 状态}`；**废止标准**（文件名含「作废」，如 `jc 684-1997`）入库时 `状态=废止`，命中时 Agent 显式标注「已作废」。
 
-> 混合检索（向量 + BM25/全文 + 元数据过滤，[ADR-0004](docs/adr/0004-indicator-chunking-hybrid-retrieval.md) 第 2/3 条）仍是纯向量，留待 Issue #4。
+混合检索（Issue #4，[ADR-0004](docs/adr/0004-indicator-chunking-hybrid-retrieval.md) 第 2/3 条）：检索不再是纯向量。
+`hybridQueryTool` 把**向量召回 + BM25 关键词召回**用 RRF 融合（`src/lib/{bm25,hybrid,retrieve}.ts`）。
+BM25 分词按「字母段/数字段 + 中文二元」切，故 `jc684`、`328.18` 这种标准号也能命中库里空格写法。
+实测「撕裂强度 钉杆法」纯向量 top6 只覆盖 2 份标准、漏掉废止的 `JC 684-1997 直角形撕裂强度`，混合检索把它召回了。
+元数据过滤 `{标准号,表名,指标名,页码,状态}` 在内存里做（中文 key 在 libSQL filter 会报错），见 `matchesFilter`；
+注意 Agent 侧只暴露 `query`：实测 gpt-5 会自作主张填 `status=现行`（漏掉废止标准，违反硬约束）或猜错标准号格式 → 召回为空空转，故过滤能力保留为库函数（已单测），不交给模型乱填。
 
 联网兜底（Issue #6）：Agent 挂 `webSearchTool`（Tavily），**库内优先**；仅当已入库标准里查不到时才联网，
 答案区分「来源：国标库」（文件名+页码）与「来源：联网」（网页链接）。需在 `.env` 配 `TAVILY_API_KEY`。
