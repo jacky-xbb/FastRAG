@@ -7,6 +7,7 @@
 //   npm run ingest -- "pdf/xxx.pdf"         # 入库指定 PDF（有文字层）
 //   npm run ingest -- --ocr "pdf/xxx.pdf"   # 扫描件：OCR（缓存到 ocr_cache/）后入库
 //   npm run ingest -- --all                 # 全量：pdf/ 下全部，18242 走文字层，其余走 OCR
+//   npm run ingest -- --all --plan          # 只预演：列出哪些走付费 OCR，不入库、不扣费
 //
 // 全量重建前建议先删 vector.db（会一并清掉会话历史，见 #5）。
 
@@ -18,6 +19,7 @@ import { embedMany } from 'ai'
 import { extractPages } from './lib/pdf.js'
 import { ocrPdfToPages } from './lib/ocr.js'
 import { chunkOcrPages, type IndicatorChunk } from './lib/indicator-chunk.js'
+import { planIngest, summarizePlan } from './lib/ingest-plan.js'
 import type { PageText } from './lib/chunk.js'
 import { embedModel, EMBED_DIMENSION, INDEX_NAME } from './lib/openrouter.js'
 import { libsqlVector } from './mastra/index.js'
@@ -81,6 +83,26 @@ async function main() {
 
   if (args.includes('--all')) {
     const files = (await readdir(PDF_DIR)).filter((f) => /\.pdf$/i.test(f)).sort()
+
+    // 预演计划：先按 文字层/缓存/付费OCR 分类，让真扣费的 paid-ocr 在动手前一目了然。
+    await mkdir(OCR_CACHE_DIR, { recursive: true })
+    const cachedFiles = new Set(
+      (existsSync(OCR_CACHE_DIR) ? await readdir(OCR_CACHE_DIR) : [])
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => f.slice(0, -'.json'.length)),
+    )
+    const plan = planIngest(files, { textLayerPdf: TEXT_LAYER_PDF, cachedFiles })
+    const counts = summarizePlan(plan)
+    console.log(
+      `[ingest] 计划：共 ${counts.total} 份｜文字层 ${counts['text-layer']}｜缓存 ${counts.cached}｜付费 OCR ${counts['paid-ocr']}`,
+    )
+    const MODE_LABEL = { 'text-layer': '文字层', cached: '缓存  ', 'paid-ocr': '付费OCR' } as const
+    for (const { file, mode } of plan) console.log(`  [${MODE_LABEL[mode]}] ${file}`)
+    if (args.includes('--plan')) {
+      console.log(`[ingest] --plan 仅预演，未入库、未触发 OCR。去掉 --plan 即执行。`)
+      return
+    }
+
     console.log(`[ingest] 全量入库 ${files.length} 份标准`)
     const failed: string[] = []
     let okCount = 0
