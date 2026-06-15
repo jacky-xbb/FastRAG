@@ -75,6 +75,42 @@ export function inferStandardCode(query: string): string | undefined {
   return codes.size === 1 ? [...codes][0] : undefined
 }
 
+/** 口语/同义词 → 标准指标名。指标行用标准术语（如「不透水性」），用户常说口语（「不渗水」），
+ *  BM25 词面对不上、向量也未必抓得住。保守、特异，避免无差别扩展引入噪声。 */
+const SYNONYMS: ReadonlyArray<readonly [string, string]> = [
+  ['不渗水', '不透水性'],
+  ['不漏水', '不透水性'],
+  ['耐高温', '耐热性'],
+  ['低温抗裂', '低温柔性'],
+]
+
+/** 把 query 里的口语同义词扩展出对应标准术语并追加到 query 末尾（原词保留，只补缺失的标准词）。
+ *  让 BM25/向量都能命中用标准术语命名的目标指标行。 */
+export function expandSynonyms(query: string): string {
+  const q = norm(query)
+  const extra: string[] = []
+  for (const [alias, canonical] of SYNONYMS) {
+    if (q.includes(norm(alias)) && !q.includes(norm(canonical)) && !extra.includes(canonical)) {
+      extra.push(canonical)
+    }
+  }
+  return extra.length ? `${query} ${extra.join(' ')}` : query
+}
+
+/** 从 query 里识别用户写的标准号（含紧凑写法 jc684 → JC 684-1997）。
+ *  对照库内真实标准号集合做归一化前缀匹配，避免脆弱正则乱抓；唯一命中才返回（歧义不锁）。 */
+export function matchKnownCode(query: string, knownCodes: readonly string[]): string | undefined {
+  // norm 后形如「字母+数字」的片段：gbt182422025 / jc684 / tbt2965。
+  const frags = norm(query).match(/[a-z]+\d{3,}/g) ?? []
+  if (frags.length === 0) return undefined
+  const hits = new Set<string>()
+  for (const code of knownCodes) {
+    const nc = norm(code)
+    if (frags.some((f) => nc.startsWith(f))) hits.add(code)
+  }
+  return hits.size === 1 ? [...hits][0] : undefined
+}
+
 /** 把命中块整理成给 Agent 读的文本：每条带来源锚点。 */
 export function formatHits(hits: { text: string; metadata: ChunkMeta }[]): string {
   if (hits.length === 0) return '【国标库】未检索到相关内容。'

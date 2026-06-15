@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { rrfFuse, matchesFilter, formatHits, inferStandardCode } from '../src/lib/hybrid.js'
+import {
+  rrfFuse,
+  matchesFilter,
+  formatHits,
+  inferStandardCode,
+  expandSynonyms,
+  matchKnownCode,
+} from '../src/lib/hybrid.js'
+
+const CODES = ['GB/T 18242-2025', 'GB/T 23457-2017', 'JC 684-1997', 'TB/T 2965-2018', 'GB/T 328.27-2007']
 
 describe('rrfFuse', () => {
   it('两路都靠前的 id 融合后排第一', () => {
@@ -64,6 +73,31 @@ describe('inferStandardCode', () => {
     expect(inferStandardCode('GB/T 23457 钉杆撕裂强度')).toBeUndefined() // 只有标准号，无产品名
     expect(inferStandardCode('防水卷材的拉伸强度')).toBeUndefined() // 泛词不映射
     expect(inferStandardCode('自粘和 SBS 卷材')).toBeUndefined() // 歧义
+  })
+})
+
+describe('matchKnownCode', () => {
+  it('识别紧凑/完整标准号写法', () => {
+    expect(matchKnownCode('jc684 的卷材不渗水能力？', CODES)).toBe('JC 684-1997')
+    expect(matchKnownCode('GB/T 18242-2025 可溶物含量', CODES)).toBe('GB/T 18242-2025')
+    expect(matchKnownCode('GB/T 328.27 取样规则', CODES)).toBe('GB/T 328.27-2007') // 不误抓其它 328.x
+  })
+
+  it('无编号 / 歧义返回 undefined', () => {
+    expect(matchKnownCode('自粘防水卷材的可溶物含量', CODES)).toBeUndefined() // 无编号片段
+    expect(matchKnownCode('防水卷材拉伸强度', CODES)).toBeUndefined()
+  })
+})
+
+describe('expandSynonyms', () => {
+  it('口语同义词扩展出标准术语并追加', () => {
+    expect(expandSynonyms('卷材防水（不渗水）能力要求？')).toBe('卷材防水（不渗水）能力要求？ 不透水性')
+    expect(expandSynonyms('耐高温多少度？')).toBe('耐高温多少度？ 耐热性')
+  })
+
+  it('已含标准术语 / 无同义词时原样返回', () => {
+    expect(expandSynonyms('不透水性要求？')).toBe('不透水性要求？') // 已含标准词，不重复追加
+    expect(expandSynonyms('拉伸强度多少？')).toBe('拉伸强度多少？') // 无同义词
   })
 })
 

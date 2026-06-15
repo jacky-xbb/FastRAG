@@ -7,7 +7,15 @@ import { embed } from 'ai'
 import { embedModel, INDEX_NAME } from './openrouter.js'
 import { loadCorpus, type CorpusChunk } from './corpus.js'
 import { buildBm25, bm25Search } from './bm25.js'
-import { rrfFuse, matchesFilter, inferStandardCode, type ChunkFilter, type ChunkMeta } from './hybrid.js'
+import {
+  rrfFuse,
+  matchesFilter,
+  inferStandardCode,
+  matchKnownCode,
+  expandSynonyms,
+  type ChunkFilter,
+  type ChunkMeta,
+} from './hybrid.js'
 
 const VEC_RECALL = 40
 const BM25_RECALL = 40
@@ -28,16 +36,21 @@ export async function hybridSearch(
 ): Promise<HybridHit[]> {
   const { query, topK = 6 } = opts
   let filter = opts.filter ?? {}
-  // 没带标准号时，从 query 的产品名（自粘/SBS/氯化聚乙烯…）推断补上：块锚点不含产品名，
-  // 普通用户用产品名问会召不回（见 ADR-0004）。映射不出则不动，仍走裸召回。
-  if (!filter.标准号) {
-    const inferred = inferStandardCode(query)
-    if (inferred) filter = { ...filter, 标准号: inferred }
-  }
   const corpus = await loadCorpus()
+  // 没带标准号时，先从 query 抽用户写的编号（jc684→JC 684-1997），抽不到再按产品名映射
+  // （自粘/SBS/氯化聚乙烯…）：块锚点不含产品名（见 ADR-0004），普通用户问法否则会召不回。
+  // 都识别不出则不动，仍走裸召回。
+  if (!filter.标准号) {
+    const codes = [...new Set(corpus.map((c) => c.metadata.标准号))]
+    const code = matchKnownCode(query, codes) ?? inferStandardCode(query)
+    if (code) filter = { ...filter, 标准号: code }
+  }
+
+  // 口语同义词扩展（不渗水→不透水性…）：让 BM25/向量都能命中用标准术语命名的指标行。
+  const searchText = expandSynonyms(query)
 
   // 向量召回与过滤无关：query 不变，embedding/向量查询只做一次，过滤回退时复用。
-  const { embedding } = await embed({ model: embedModel, value: query })
+  const { embedding } = await embed({ model: embedModel, value: searchText })
   const vec = await vectorStore.query({ indexName: INDEX_NAME, queryVector: embedding, topK: VEC_RECALL })
 
   // 过滤先行：BM25 在过滤后的语料上 build（语料小，每次 build 开销可忽略），
@@ -47,7 +60,7 @@ export async function hybridSearch(
     const byId = new Map(filtered.map((c) => [c.id, c]))
     const vecIds = vec.map((r) => r.id).filter((id) => byId.has(id))
     const bm25 = buildBm25(filtered.map((c) => ({ id: c.id, text: c.text })))
-    const kwIds = bm25Search(bm25, query, BM25_RECALL).map((r) => r.id)
+    const kwIds = bm25Search(bm25, searchText, BM25_RECALL).map((r) => r.id)
     return rrfFuse([vecIds, kwIds])
       .slice(0, topK)
       .map(({ id }) => {
