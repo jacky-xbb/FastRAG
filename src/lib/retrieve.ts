@@ -7,7 +7,7 @@ import { embed } from 'ai'
 import { embedModel, INDEX_NAME } from './openrouter.js'
 import { loadCorpus, type CorpusChunk } from './corpus.js'
 import { buildBm25, bm25Search } from './bm25.js'
-import { rrfFuse, matchesFilter, type ChunkFilter, type ChunkMeta } from './hybrid.js'
+import { rrfFuse, matchesFilter, inferStandardCode, type ChunkFilter, type ChunkMeta } from './hybrid.js'
 
 const VEC_RECALL = 40
 const BM25_RECALL = 40
@@ -27,7 +27,13 @@ export async function hybridSearch(
   opts: { query: string; filter?: ChunkFilter; topK?: number },
 ): Promise<HybridHit[]> {
   const { query, topK = 6 } = opts
-  const filter = opts.filter ?? {}
+  let filter = opts.filter ?? {}
+  // 没带标准号时，从 query 的产品名（自粘/SBS/氯化聚乙烯…）推断补上：块锚点不含产品名，
+  // 普通用户用产品名问会召不回（见 ADR-0004）。映射不出则不动，仍走裸召回。
+  if (!filter.标准号) {
+    const inferred = inferStandardCode(query)
+    if (inferred) filter = { ...filter, 标准号: inferred }
+  }
   const corpus = await loadCorpus()
 
   // 向量召回与过滤无关：query 不变，embedding/向量查询只做一次，过滤回退时复用。

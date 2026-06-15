@@ -52,6 +52,29 @@ export function matchesFilter(meta: ChunkMeta, filter: ChunkFilter): boolean {
   return true
 }
 
+/** 产品名/俗称 → 标准号。块锚点是「标准号+表名+指标名」，不含产品名（ADR-0004），
+ *  用户用产品名问（如「自粘防水卷材的钉杆撕裂强度」）时块里没有「自粘」二字，向量/BM25 都召不回。
+ *  这里把「足够特异、唯一指向某标准」的产品名映射回标准号，检索前补进过滤。
+ *  只收特异词，避开「改性沥青」「防水卷材」这类多标准都沾的泛词。 */
+const PRODUCT_TO_CODE: ReadonlyArray<readonly [string, string]> = [
+  ['自粘', 'GB/T 23457'],
+  ['SBS', 'GB/T 18242'],
+  ['弹性体改性沥青', 'GB/T 18242'],
+  ['氯化聚乙烯', 'JC 684'],
+  ['橡胶共混', 'JC 684'],
+  ['湿铺', 'GB/T 35467'],
+]
+
+/** 从 query 的产品名推断标准号；命中唯一标准才返回，命中多个不同标准（歧义）返回 undefined。 */
+export function inferStandardCode(query: string): string | undefined {
+  const q = norm(query)
+  const codes = new Set<string>()
+  for (const [kw, code] of PRODUCT_TO_CODE) {
+    if (q.includes(norm(kw))) codes.add(code)
+  }
+  return codes.size === 1 ? [...codes][0] : undefined
+}
+
 /** 把命中块整理成给 Agent 读的文本：每条带来源锚点。 */
 export function formatHits(hits: { text: string; metadata: ChunkMeta }[]): string {
   if (hits.length === 0) return '【国标库】未检索到相关内容。'
