@@ -1,5 +1,5 @@
 // 混合检索的纯逻辑（ADR-0004 硬约束②③）：
-// RRF 融合多路召回 + 元数据过滤 + 命中结果格式化（废止块显式标「已作废」，硬约束⑥）。
+// RRF 融合多路召回 + 元数据过滤 + 命中结果格式化。
 // 元数据用中文 key，libSQL 的 filter 解析不了中文 key（会报 Invalid field key），
 // 故过滤在内存里做，绕开这个 bug。纯函数，可单测。
 
@@ -17,7 +17,6 @@ export interface ChunkFilter {
   表名?: string
   指标名?: string
   页码?: number
-  状态?: string
 }
 
 /** Reciprocal Rank Fusion：多路排名按 1/(k+rank) 累加重排，k=60 为常用默认。 */
@@ -53,23 +52,13 @@ export function matchesFilter(meta: ChunkMeta, filter: ChunkFilter): boolean {
   return true
 }
 
-/** 收窄过滤器，给不可控的调用方（如 LLM 填参）兜底（硬约束⑥）：
- *  状态只允许「废止」作正向收窄（专门查作废标准）；现行/有效等反向排除一律丢弃，
- *  防止模型默认填 状态=现行 把废止标准漏掉。其余字段原样保留。 */
-export function sanitizeFilter(filter: ChunkFilter): ChunkFilter {
-  const out: ChunkFilter = { ...filter }
-  if (out.状态 != null && !norm(out.状态).includes('废止')) delete out.状态
-  return out
-}
-
-/** 把命中块整理成给 Agent 读的文本：每条带来源锚点，废止块显式标「已作废」。 */
+/** 把命中块整理成给 Agent 读的文本：每条带来源锚点。 */
 export function formatHits(hits: { text: string; metadata: ChunkMeta }[]): string {
   if (hits.length === 0) return '【国标库】未检索到相关内容。'
   const lines = ['【国标库检索结果 · 国标库来源】']
   hits.forEach((h, i) => {
     const m = h.metadata
-    const deprecated = m.状态 === '废止' ? '（该标准已作废）' : ''
-    const where = `${m.标准号}${deprecated}｜${m.表名 || '正文'}｜第 ${m.页码} 页`
+    const where = `${m.标准号}｜${m.表名 || '正文'}｜第 ${m.页码} 页`
     lines.push(`${i + 1}. [${where}]\n${h.text}`)
   })
   return lines.join('\n\n')

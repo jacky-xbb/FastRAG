@@ -7,7 +7,7 @@
 // 多轮共用同一个 thread/resource，历史存在与向量库相同的 libSQL 文件里（#5）。
 
 import 'dotenv/config'
-import { mastra } from './mastra/index.js'
+import { mastra, GENERATE_MAX_STEPS } from './mastra/index.js'
 
 // 固定会话标识：同一 thread 内多轮可互相引用，跨次运行也能续上历史。
 const THREAD_ID = 'cli-demo-thread'
@@ -29,6 +29,7 @@ async function main() {
     console.log(`\n[ask] 第 ${i + 1} 轮问题：${question}\n`)
     const res = await agent.generate(question, {
       memory: { thread: THREAD_ID, resource: RESOURCE_ID },
+      maxSteps: GENERATE_MAX_STEPS,
     })
     console.log(`[ask] 第 ${i + 1} 轮回答：\n`)
     console.log(res.text)

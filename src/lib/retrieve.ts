@@ -1,13 +1,13 @@
 // 混合检索编排（集成层，含 embedding 网络 + 库读取，不做 TDD）。
 // 流程：query embedding → 向量召回（over-fetch 后内存过滤，绕开 libSQL 中文 key filter）
 //      + BM25 关键词召回（在过滤后的语料上）→ RRF 融合 → 取 topK。
-// 元数据过滤对两路都生效，让指标问答能按 {标准号,表名,指标名,页码,状态} 收窄。
+// 元数据过滤对两路都生效，让指标问答能按 {标准号,表名,指标名,页码} 收窄。
 
 import { embed } from 'ai'
 import { embedModel, INDEX_NAME } from './openrouter.js'
 import { loadCorpus, type CorpusChunk } from './corpus.js'
 import { buildBm25, bm25Search } from './bm25.js'
-import { rrfFuse, matchesFilter, sanitizeFilter, type ChunkFilter, type ChunkMeta } from './hybrid.js'
+import { rrfFuse, matchesFilter, type ChunkFilter, type ChunkMeta } from './hybrid.js'
 
 const VEC_RECALL = 40
 const BM25_RECALL = 40
@@ -27,8 +27,7 @@ export async function hybridSearch(
   opts: { query: string; filter?: ChunkFilter; topK?: number },
 ): Promise<HybridHit[]> {
   const { query, topK = 6 } = opts
-  // 收窄过滤器：禁止用 状态=现行 反向排除（否则会漏掉废止标准，违反硬约束⑥）。
-  const filter = sanitizeFilter(opts.filter ?? {})
+  const filter = opts.filter ?? {}
   const corpus = await loadCorpus()
 
   // 向量召回与过滤无关：query 不变，embedding/向量查询只做一次，过滤回退时复用。
