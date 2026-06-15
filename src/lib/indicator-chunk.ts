@@ -203,9 +203,16 @@ export function standardNameFromFileName(fileName: string): string {
     .trim()
 }
 
+/** 购书小票/订单页噪声：OCR 把书的购买凭证页当正文（如 TB/T 3360 第2页）。
+ *  这些词国标技术正文绝无，命中即判噪声块、入库前剔除。 */
+export function isReceiptNoise(text: string): boolean {
+  return /零售|码洋|实洋|折扣额|收款方式|出货方式|录入员|会员姓名|出版社/.test(text)
+}
+
 /**
  * 把 OCR 出的逐页 markdown 切块：表格按指标行切，表外正文按定长字符切。
  * 标准号/状态由调用方（或文件名）给定，每块都带全套元数据。
+ * 入库前剔除购书小票噪声块（isReceiptNoise）。
  */
 export function chunkOcrPages(
   pages: PageText[],
@@ -250,5 +257,5 @@ export function chunkOcrPages(
       })
     }
   }
-  return records
+  return records.filter((r) => !isReceiptNoise(r.text))
 }
