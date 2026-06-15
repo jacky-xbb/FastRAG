@@ -93,7 +93,9 @@ async function main() {
       const res = await agent.generate(c.input.query, { maxSteps: GENERATE_MAX_STEPS })
       srcAnsTotal++
       const wantCode = c.groundTruth.标准号 ?? ''
-      const srcCorrect = wantCode !== '' && norm(res.text).includes(norm(wantCode))
+      // 去掉「/T」「/Z」等推荐性后缀再比：库存「JC 684」、LLM 常写「JC/T 684」，本是同一标准。
+      const codeNorm = (s: string) => norm(s.replace(/\/[A-Za-z]+/g, ''))
+      const srcCorrect = wantCode !== '' && codeNorm(res.text).includes(codeNorm(wantCode))
       if (srcCorrect) srcAnsPass++
       ansCol = ` | 来源:${srcCorrect ? '✓对' : '✗错/缺'}`
     }
