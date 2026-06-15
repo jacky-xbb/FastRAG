@@ -12,8 +12,10 @@ export const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 })
 
-/** 对话模型 */
-export const chatModel = openrouter.chat('openai/gpt-5')
+/** 对话模型：DeepSeek V4 Flash（ADR-0001）。
+ * 「查表取数 + 标来源」用不上 gpt-5 的深推理；Flash 实测更快、检索次数更少、中文与废止标注都达标，
+ * 成本约为 gpt-5 的 1/55。注意 DS V4 只支持 high/xhigh 两档 reasoning，没有 low，故不设 effort。 */
+export const chatModel = openrouter.chat('deepseek/deepseek-v4-flash')
 
 /** embedding 模型（1536 维）。入库与检索必须用同一个，否则向量空间对不上。 */
 export const embedModel = openrouter.textEmbeddingModel('openai/text-embedding-3-small')

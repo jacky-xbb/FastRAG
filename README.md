@@ -5,9 +5,9 @@
 
 ## 现状
 
-骨架贯通（tracer bullet，Issue #1）：用有文字层的 `GBT 18242-2025` 跑通
+骨架贯通（tracer bullet，Issue #1）：用 `GBT 18242-2025` 跑通
 `PDF → 切块 → 入库 → 检索 → Agent 问答带来源` 全链路。
-对话 `openai/gpt-5` + embedding `openai/text-embedding-3-small` 均走 OpenRouter（[ADR-0001](docs/adr/0001-model-routing-split.md)）。
+对话 `deepseek/deepseek-v4-flash` + embedding `openai/text-embedding-3-small` 均走 OpenRouter（[ADR-0001](docs/adr/0001-model-routing-split.md)）。
 
 指标行切块（Issue #3）：OCR 出的指标表是带 `rowspan/colspan` 的 HTML `<table>`，
 `src/lib/indicator-chunk.ts` 先「解析网格 + LaTeX 单位归一化 + `\n` 清洗」，再**按指标行切块**——
@@ -44,10 +44,9 @@ npm install
 ## 用法
 
 ```bash
-npm run ingest                      # 入库默认标的 GBT 18242-2025（有文字层）
-npm run ingest -- "pdf/xxx.pdf"     # 入库指定 PDF（有文字层）
-npm run ingest -- --ocr "pdf/xxx.pdf" # 扫描件：OCR（缓存到 ocr_cache/）后按指标行入库
-npm run ingest -- --all             # 全量：pdf/ 下全部，18242 走文字层，其余走 OCR
+npm run ingest                      # 入库默认标的 GBT 18242-2025（走 OCR）
+npm run ingest -- "pdf/xxx.pdf"     # 入库指定 PDF（走 OCR，缓存命中则免费）
+npm run ingest -- --all             # 全量：pdf/ 下全部，均走 OCR（缓存命中则免费）
 npm run ingest -- --all --plan      # 只预演：列出哪些走付费 OCR，不入库、不扣费
 npm run ocr                         # OCR 默认扫描件 GBT 23457-2017 → ocr_out.md
 npm run ocr -- "pdf/xxx.pdf" out.md # 扫描件 PDF → markdown（PaddleOCR-VL）
