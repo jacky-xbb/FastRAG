@@ -34,7 +34,7 @@ export function rrfFuse(rankings: string[][], k = 60): { id: string; score: numb
 
 /** 归一化：小写 + 去掉空格/标点等非字母数字与非中文字符。
  *  让「jc684」对上库里「JC 684-1997」、「GB/T 23457」对上「GB/T 23457-2017」。 */
-function norm(s: string): string {
+export function norm(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9一-鿿]/g, '')
 }
 
@@ -63,6 +63,9 @@ const PRODUCT_TO_CODE: ReadonlyArray<readonly [string, string]> = [
   ['氯化聚乙烯', 'JC 684'],
   ['橡胶共混', 'JC 684'],
   ['湿铺', 'GB/T 35467'],
+  ['道桥', 'JC/T 974'],
+  ['路桥用', 'JT/T 536'], // 用全词「路桥用」避免被「铁路桥」的子串「路桥」误命中
+  ['铁路桥', 'TB/T 2965'],
 ]
 
 /** 从 query 的产品名推断标准号；命中唯一标准才返回，命中多个不同标准（歧义）返回 undefined。 */

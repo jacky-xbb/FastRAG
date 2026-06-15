@@ -6,8 +6,9 @@
 //   · --filtered：用 groundTruth 的「标准号」当过滤（模拟 Agent 提取的 standardCode），
 //     量「标准号过滤生效时的召回上界」，贴近产线真实体验。只过滤标准号、不过滤指标名
 //     （指标名是要找的答案，拿它当过滤条件＝作弊），把「过滤有效性」与「LLM 提取准不准」隔离开。
-// P2 来源标注：仅 --llm，端到端跑 Agent，检查答案是否带「来源 + 页码」（来源可溯）。
-//   注意：P2 只保证「标了来源」，不保证「来源对」——来源是否对由 P0 兜底，两者合看才完整。
+// P2 来源正确：仅 --llm，端到端跑 Agent，校验答案引用的来源标准号是否「对」——
+//   答案里要出现 groundTruth 标准号（归一化匹配，「GB/T 18242」对上「GB/T 18242-2025」）。
+//   不只是「有来源」而是「来源对」；与 P0 合看：P0 保证检索到对的块，P2 保证答案引到对的标准。
 //
 // 用法：
 //   npx tsx test/eval.ts             # 裸召回 P0，快、便宜（仅 query embedding 开销）
@@ -20,7 +21,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { hybridSearch } from '../src/lib/retrieve.js'
-import { matchesFilter, type ChunkFilter, type ChunkMeta } from '../src/lib/hybrid.js'
+import { matchesFilter, norm, type ChunkFilter, type ChunkMeta } from '../src/lib/hybrid.js'
 import { libsqlVector, mastra, GENERATE_MAX_STEPS } from '../src/mastra/index.js'
 
 interface EvalCase {
@@ -84,14 +85,17 @@ async function main() {
       if (recalled) codeHit++
     }
 
-    // P2：仅 --llm，端到端跑 Agent，检查答案是否带「来源 + 页码」
+    // P2：仅 --llm，端到端跑 Agent。校验答案引用的来源标准号是否「对」——
+    // 答案里要出现 groundTruth 的标准号（归一化匹配，「GB/T 18242」对上「GB/T 18242-2025」）。
+    // 只查「有没有来源」不够，这里查「来源对不对」；来源对 ⇒ 答案确实引到了该标准。
     let ansCol = ''
     if (agent) {
       const res = await agent.generate(c.input.query, { maxSteps: GENERATE_MAX_STEPS })
       srcAnsTotal++
-      const hasSrc = /来源/.test(res.text) && /页/.test(res.text)
-      if (hasSrc) srcAnsPass++
-      ansCol = ` | 答案:${hasSrc ? '来源✓' : '来源✗'}`
+      const wantCode = c.groundTruth.标准号 ?? ''
+      const srcCorrect = wantCode !== '' && norm(res.text).includes(norm(wantCode))
+      if (srcCorrect) srcAnsPass++
+      ansCol = ` | 来源:${srcCorrect ? '✓对' : '✗错/缺'}`
     }
 
     const status = recalled ? `✓ @${rank}` : '✗ 未召回'
@@ -105,7 +109,7 @@ async function main() {
   console.log(`P0 召回率 Recall@${K} 总体: ${pct(recallHit, cases.length)}`)
   console.log(`  · 带标准号: ${pct(codeHit, codeTotal)}`)
   console.log(`  · 不带标准号: ${pct(noCodeHit, noCodeTotal)}  ← 贴近普通用户问法`)
-  if (useLlm) console.log(`P2 来源标注(答案层): ${srcAnsPass}/${srcAnsTotal}`)
+  if (useLlm) console.log(`P2 来源标准号正确(答案层): ${pct(srcAnsPass, srcAnsTotal)}`)
   console.log()
 }
 

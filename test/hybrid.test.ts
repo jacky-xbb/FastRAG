@@ -69,6 +69,12 @@ describe('inferStandardCode', () => {
     expect(inferStandardCode('SBS 弹性体改性沥青防水卷材的可溶物含量')).toBe('GB/T 18242')
   })
 
+  it('道桥/路桥/铁路桥各自特异，不被子串「路桥」⊂「铁路桥」误判', () => {
+    expect(inferStandardCode('道桥用改性沥青防水卷材的可溶物含量')).toBe('JC/T 974')
+    expect(inferStandardCode('路桥用卷材的可溶物含量')).toBe('JT/T 536')
+    expect(inferStandardCode('铁路桥梁混凝土桥面防水层的拉力')).toBe('TB/T 2965') // 含「路桥」但不歧义
+  })
+
   it('无产品名 / 歧义（命中多个不同标准）返回 undefined', () => {
     expect(inferStandardCode('GB/T 23457 钉杆撕裂强度')).toBeUndefined() // 只有标准号，无产品名
     expect(inferStandardCode('防水卷材的拉伸强度')).toBeUndefined() // 泛词不映射
