@@ -3,7 +3,6 @@ import {
   rrfFuse,
   matchesFilter,
   formatHits,
-  inferStandardCode,
   expandSynonyms,
   matchKnownCode,
 } from '../src/lib/hybrid.js'
@@ -55,30 +54,6 @@ describe('matchesFilter', () => {
     expect(matchesFilter(m, { 标准号: 'jc684' })).toBe(true) // 去空格大小写无关
     expect(matchesFilter(m, { 标准号: 'JC684' })).toBe(true)
     expect(matchesFilter(m, { 标准号: 'GB' })).toBe(false) // 不沾边仍排除
-  })
-})
-
-describe('inferStandardCode', () => {
-  it('产品名/俗称映射到标准号（弥补块锚点缺产品名）', () => {
-    expect(inferStandardCode('自粘防水卷材的可溶物含量要求？')).toBe('GB/T 23457')
-    expect(inferStandardCode('SBS 防水卷材的耐热性试验温度？')).toBe('GB/T 18242')
-    expect(inferStandardCode('氯化聚乙烯橡胶共混防水卷材的拉伸强度？')).toBe('JC 684')
-  })
-
-  it('同一标准的多个特异词共存仍唯一', () => {
-    expect(inferStandardCode('SBS 弹性体改性沥青防水卷材的可溶物含量')).toBe('GB/T 18242')
-  })
-
-  it('道桥/路桥/铁路桥各自特异，不被子串「路桥」⊂「铁路桥」误判', () => {
-    expect(inferStandardCode('道桥用改性沥青防水卷材的可溶物含量')).toBe('JC/T 974')
-    expect(inferStandardCode('路桥用卷材的可溶物含量')).toBe('JT/T 536')
-    expect(inferStandardCode('铁路桥梁混凝土桥面防水层的拉力')).toBe('TB/T 2965') // 含「路桥」但不歧义
-  })
-
-  it('无产品名 / 歧义（命中多个不同标准）返回 undefined', () => {
-    expect(inferStandardCode('GB/T 23457 钉杆撕裂强度')).toBeUndefined() // 只有标准号，无产品名
-    expect(inferStandardCode('防水卷材的拉伸强度')).toBeUndefined() // 泛词不映射
-    expect(inferStandardCode('自粘和 SBS 卷材')).toBeUndefined() // 歧义
   })
 })
 

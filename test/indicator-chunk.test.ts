@@ -3,6 +3,7 @@ import {
   normalizeCell,
   parseHtmlTable,
   standardCodeFromFileName,
+  standardNameFromFileName,
   statusFromFileName,
   chunkOcrPages,
 } from '../src/lib/indicator-chunk.js'
@@ -118,6 +119,27 @@ describe('standardCodeFromFileName', () => {
     ['TBT3360.1-2023铁路隧道防排水材料第1部分-防水板和排水板.PDF', 'TB/T 3360.1-2023'],
   ])('%s → %s', (file, code) => {
     expect(standardCodeFromFileName(file)).toBe(code)
+  })
+})
+
+describe('standardNameFromFileName', () => {
+  it.each([
+    ['GBT 18242-2025 弹性体塑性体改性沥青防水卷材.pdf', '弹性体塑性体改性沥青防水卷材'],
+    ['jc 684-1997 氯化聚乙烯——橡胶共混防水卷材-----作废.pdf', '氯化聚乙烯橡胶共混防水卷材'],
+    ['TBT2965-2018铁路桥梁混凝土桥面防水层.pdf', '铁路桥梁混凝土桥面防水层'],
+  ])('%s → %s', (file, name) => {
+    expect(standardNameFromFileName(file)).toBe(name)
+  })
+})
+
+describe('chunkOcrPages 块前缀含产品名（治本：用户用产品名问也召得回）', () => {
+  it('前缀加上从文件名提取的产品名', () => {
+    const recs = chunkOcrPages(
+      [{ page: 1, text: `<div>表2</div>${table2}` }],
+      { fileName: 'GBT 23457-2017 自粘聚合物改性沥青防水卷材.pdf', 标准号: 'GB/T 23457-2017', size: 800, overlap: 100 },
+    )
+    const 拉力 = recs.find((r) => r.metadata.指标名.includes('拉力'))!
+    expect(拉力.text).toContain('自粘聚合物改性沥青防水卷材')
   })
 })
 

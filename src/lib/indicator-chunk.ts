@@ -101,6 +101,7 @@ function joinDedup(parts: string[]): string {
 function tableToChunks(
   grid: string[][],
   base: Omit<IndicatorChunk['metadata'], '指标名'> & { 表名: string },
+  标准名称: string,
 ): IndicatorChunk[] {
   if (grid.length === 0) return []
   const numCols = Math.max(...grid.map((r) => r.length))
@@ -136,7 +137,7 @@ function tableToChunks(
   }
 
   const chunks: IndicatorChunk[] = []
-  const prefix = `${base.标准号} ${base.表名}`.trim()
+  const prefix = `${base.标准号} ${标准名称} ${base.表名}`.replace(/\s+/g, ' ').trim()
 
   for (const row of grid.slice(headerCount)) {
     const 指标名 = joinDedup(labelCols.map((c) => row[c] ?? ''))
@@ -190,6 +191,18 @@ export function statusFromFileName(fileName: string): Status {
   return /作废|废止/.test(fileName) ? '废止' : '现行'
 }
 
+/** 从文件名提取标准的中文名称/产品名（标准号拉丁段之后的中文部分），去掉「作废/废止」状态词与连字符。
+ *  作为块的语义锚点之一（ADR-0004）：用户常用产品名问（「自粘防水卷材」），把它写进块才召得回。 */
+export function standardNameFromFileName(fileName: string): string {
+  const stem = basename(fileName).replace(/\.[a-z]+$/i, '')
+  const zh = stem.match(/[一-鿿].*/)?.[0] ?? '' // 第一个中文字符起到末尾
+  return zh
+    .replace(/作废|废止/g, '')
+    .replace(/[-—–_]+/g, '') // 文件名里的「——」「-----」等连字符，去掉让产品名连续好匹配
+    .replace(/\s+/g, '')
+    .trim()
+}
+
 /**
  * 把 OCR 出的逐页 markdown 切块：表格按指标行切，表外正文按定长字符切。
  * 标准号/状态由调用方（或文件名）给定，每块都带全套元数据。
@@ -200,11 +213,14 @@ export function chunkOcrPages(
     fileName: string
     标准号?: string
     状态?: Status
+    标准名称?: string
   } & ChunkOptions,
 ): IndicatorChunk[] {
   const { fileName, size, overlap } = opts
   const 标准号 = opts.标准号 ?? standardCodeFromFileName(fileName)
   const 状态 = opts.状态 ?? statusFromFileName(fileName)
+  const 标准名称 = opts.标准名称 ?? standardNameFromFileName(fileName)
+  const namePrefix = [标准号, 标准名称].filter(Boolean).join(' ')
   const records: IndicatorChunk[] = []
 
   for (const { page, text } of pages) {
@@ -219,17 +235,17 @@ export function chunkOcrPages(
       const 表名 = captionBefore(before)
       const grid = parseHtmlTable(m[0])
       records.push(
-        ...tableToChunks(grid, { fileName, 标准号, 表名, 页码: page, 状态 }),
+        ...tableToChunks(grid, { fileName, 标准号, 表名, 页码: page, 状态 }, 标准名称),
       )
       last = m.index + m[0].length
     }
     proseParts.push(text.slice(last))
 
-    // 表外正文：去掉 HTML 标签后定长切块，表名/指标名留空。
+    // 表外正文：去掉 HTML 标签后定长切块，前缀挂标准号+产品名（散文块否则无锚点），表名/指标名留空。
     const prose = proseParts.join('\n').replace(/<[^>]+>/g, ' ')
     for (const chunk of splitIntoChunks(prose, { size, overlap })) {
       records.push({
-        text: chunk,
+        text: namePrefix ? `${namePrefix} / ${chunk}` : chunk,
         metadata: { fileName, 标准号, 表名: '', 指标名: '', 页码: page, 状态 },
       })
     }

@@ -10,7 +10,6 @@ import { buildBm25, bm25Search } from './bm25.js'
 import {
   rrfFuse,
   matchesFilter,
-  inferStandardCode,
   matchKnownCode,
   expandSynonyms,
   type ChunkFilter,
@@ -37,12 +36,11 @@ export async function hybridSearch(
   const { query, topK = 6 } = opts
   let filter = opts.filter ?? {}
   const corpus = await loadCorpus()
-  // 没带标准号时，先从 query 抽用户写的编号（jc684→JC 684-1997），抽不到再按产品名映射
-  // （自粘/SBS/氯化聚乙烯…）：块锚点不含产品名（见 ADR-0004），普通用户问法否则会召不回。
-  // 都识别不出则不动，仍走裸召回。
+  // 没带标准号时，从 query 抽用户写的编号（jc684→JC 684-1997）补进过滤；抽不到则走裸召回。
+  // 产品名问法（自粘/SBS…）不再靠手工映射表——产品名已作为锚点写进块（ADR-0004），向量/BM25 自然召回。
   if (!filter.标准号) {
     const codes = [...new Set(corpus.map((c) => c.metadata.标准号))]
-    const code = matchKnownCode(query, codes) ?? inferStandardCode(query)
+    const code = matchKnownCode(query, codes)
     if (code) filter = { ...filter, 标准号: code }
   }
 
