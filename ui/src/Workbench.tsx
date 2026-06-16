@@ -18,7 +18,8 @@ import { Loader } from '@/components/ai-elements/loader'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { useIngestSim } from './lib/useIngestSim'
 import { useLibrary } from './lib/useLibrary'
-import { MOCK_SESSIONS, SUGGESTIONS, INGEST_STAGES } from './lib/mockData'
+import { useThreads } from './lib/useThreads'
+import { SUGGESTIONS, INGEST_STAGES } from './lib/mockData'
 
 export function Workbench() {
   const [authed, setAuthed] = useState(false)
@@ -160,6 +161,17 @@ function Upload() {
   )
 }
 
+// 时间戳 → 简短中文（今天显示时:分，往前显示月-日）。
+function fmtWhen(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  return sameDay
+    ? `今天 ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+    : `${d.getMonth() + 1} 月 ${d.getDate()} 日`
+}
+
 // —— UIMessage parts 工具函数 ——
 type AnyPart = { type: string; text?: string; toolName?: string; state?: string; input?: unknown; output?: unknown; errorText?: string }
 
@@ -203,8 +215,10 @@ function parseSources(parts: AnyPart[]): Source[] {
   return out
 }
 
+const newThreadId = () => 'web-' + Math.random().toString(36).slice(2)
+
 function Chat() {
-  const threadId = useRef('web-' + Math.random().toString(36).slice(2))
+  const threadId = useRef(newThreadId())
   const transport = useRef(
     new DefaultChatTransport({
       api: '/api/chat',
@@ -214,7 +228,33 @@ function Chat() {
       }),
     }),
   )
-  const { messages, status, sendMessage } = useChat({ transport: transport.current })
+  // 首条用户消息落库后会派生出标题，发完刷新左栏让新会话冒出来（#12）。
+  const { threads, refresh: refreshThreads } = useThreads()
+  const { messages, status, sendMessage, setMessages } = useChat({
+    transport: transport.current,
+    onFinish: () => refreshThreads(),
+  })
+  const [activeId, setActiveId] = useState(threadId.current)
+
+  // 切到某历史会话：把它的消息 seed 进 useChat，并把 threadId 切过去续聊（多轮记忆延续到该 thread）。
+  async function openThread(id: string) {
+    threadId.current = id
+    setActiveId(id)
+    try {
+      const res = await fetch('/api/messages?threadId=' + encodeURIComponent(id))
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setMessages((await res.json()) as UIMessage[])
+    } catch {
+      setMessages([])
+    }
+  }
+
+  // 新会话：开一个新 threadId、清空对话。
+  function newChat() {
+    threadId.current = newThreadId()
+    setActiveId(threadId.current)
+    setMessages([])
+  }
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
   const lastTools = lastAssistant ? toolPartsOf(lastAssistant) : []
@@ -224,12 +264,18 @@ function Chat() {
     <div className="flex flex-1 overflow-hidden">
       {/* 左：会话 + 库 */}
       <aside className="w-56 flex-none overflow-y-auto border-r border-zinc-800 p-3 text-sm">
-        <button className="mb-3 w-full rounded-md border border-zinc-700 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">+ 新会话</button>
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">历史 <span className="normal-case text-zinc-600">（示例数据）</span></div>
-        {MOCK_SESSIONS.map((s) => (
-          <button key={s.id} className="mb-0.5 block w-full truncate rounded px-2 py-1.5 text-left text-zinc-400 hover:bg-zinc-800">
+        <button onClick={newChat} className="mb-3 w-full rounded-md border border-zinc-700 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">+ 新会话</button>
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">历史</div>
+        {!threads && <div className="px-2 text-xs text-zinc-600">加载中…</div>}
+        {threads && threads.length === 0 && <div className="px-2 text-xs text-zinc-600">暂无历史会话。</div>}
+        {threads?.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => openThread(s.id)}
+            className={`mb-0.5 block w-full truncate rounded px-2 py-1.5 text-left hover:bg-zinc-800 ${s.id === activeId ? 'bg-zinc-800' : ''}`}
+          >
             <span className="text-zinc-300">{s.title}</span>
-            <span className="block truncate text-xs text-zinc-600">{s.when}</span>
+            <span className="block truncate text-xs text-zinc-600">{fmtWhen(s.updatedAt)}</span>
           </button>
         ))}
       </aside>

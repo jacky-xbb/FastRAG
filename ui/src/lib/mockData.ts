@@ -1,20 +1,7 @@
-// 示例数据 —— 历史会话列表后端尚未暴露 HTTP 接口，先用示例数据撑布局。
-// 对话是真的（走 /api/chat）；资料库列表已接真（GET /api/library，见 useLibrary）。
-// TODO(接后端)：MOCK_SESSIONS → GET /api/threads + /api/messages（#12）。
-
-export interface Session {
-  id: string
-  title: string
-  snippet: string
-  when: string
-}
-
-export const MOCK_SESSIONS: Session[] = [
-  { id: 's1', title: 'I 型卷材可溶物含量', snippet: 'GBT 18242-2025 中 I 型卷材的可溶物含量要求是多少？', when: '今天 14:22' },
-  { id: 's2', title: '预铺卷材搭接强度', snippet: 'GB/T 23457 的搭接缝剥离强度指标？', when: '今天 10:05' },
-  { id: 's3', title: '低温柔性对比', snippet: '弹性体和塑性体改性沥青卷材低温柔性差别？', when: '昨天' },
-  { id: 's4', title: '拉伸性能试验方法', snippet: 'GB/T 328 里拉力和延伸率怎么测？', when: '6 月 11 日' },
-]
+// 示例数据 —— 仅剩首屏建议词与上传管线阶段文案。
+// 对话走真实 /api/chat；资料库列表已接真（GET /api/library，见 useLibrary）；
+// 历史会话已接真（GET /api/threads + /api/messages，见 useThreads，#12）。
+// TODO(接后端)：上传向量化 useIngestSim → POST /api/ingest（#10）。
 
 export const SUGGESTIONS = [
   'GBT 18242-2025 中 I 型卷材的可溶物含量要求是多少？',

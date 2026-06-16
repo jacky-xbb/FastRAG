@@ -13,9 +13,11 @@ import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, extname, normalize } from 'node:path'
 import { createUIMessageStream, pipeUIMessageStreamToResponse } from 'ai'
-import { mastra, GENERATE_MAX_STEPS } from './mastra/index.js'
+import { MessageList } from '@mastra/core/agent/message-list'
+import { mastra, memory, GENERATE_MAX_STEPS } from './mastra/index.js'
 import { loadCorpusFresh } from './lib/corpus.js'
 import { aggregateLibrary } from './lib/library.js'
+import { firstUserText, deriveThreadTitle } from './lib/threads.js'
 
 const PORT = Number(process.env.PORT) || 4111
 const RESOURCE_ID = 'web-user'
@@ -69,6 +71,15 @@ function readBody(req: import('node:http').IncomingMessage): Promise<string> {
 }
 
 const agent = mastra.getAgent('standardsAgent')
+
+// 取某会话的历史消息，转成 AI SDK v6 UIMessage（便于前端 seed useChat，ADR-0006）。
+// recall 按时间升序返回（user→assistant…），MessageList 再桥接成 ui parts。
+async function threadUIMessages(threadId: string) {
+  const { messages } = await memory.recall({ threadId, resourceId: RESOURCE_ID, perPage: false })
+  const list = new MessageList({ threadId, resourceId: RESOURCE_ID })
+  list.add(messages, 'memory')
+  return list.get.all.aiV6.ui()
+}
 
 // 从 useChat 发来的 body 里取出最后一条用户消息的纯文本。
 // 前端 transport 只发 {messages:[最新一条], threadId}（服务端记忆为准，ADR-0006）；
@@ -176,6 +187,54 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify(library))
     } catch (err) {
       console.error('[library] 出错:', err)
+      res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
+    }
+    return
+  }
+
+  // 历史会话列表（#12）：列出 web-user 的会话，标题由首条用户消息派生，按更新时间倒序。
+  // 标题在库里为空（未开 generateTitle），故逐会话取消息派生；无用户消息的空会话剔除。
+  if (req.method === 'GET' && (req.url || '').split('?')[0] === '/api/threads') {
+    try {
+      const { threads } = await memory.listThreads({
+        filter: { resourceId: RESOURCE_ID },
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+        perPage: false,
+      })
+      const summaries = await Promise.all(
+        threads.map(async (t) => {
+          const ui = await threadUIMessages(t.id)
+          const text = firstUserText(ui)
+          if (!text) return null // 空会话（无用户消息）不进列表
+          return {
+            id: t.id,
+            title: deriveThreadTitle(text),
+            createdAt: t.createdAt,
+            updatedAt: t.updatedAt,
+          }
+        }),
+      )
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify(summaries.filter(Boolean)))
+    } catch (err) {
+      console.error('[threads] 出错:', err)
+      res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
+    }
+    return
+  }
+
+  // 某会话的历史消息（#12）：AI SDK v6 UIMessage 形状，前端用来 seed useChat。
+  if (req.method === 'GET' && (req.url || '').split('?')[0] === '/api/messages') {
+    try {
+      const threadId = new URL(req.url || '', 'http://localhost').searchParams.get('threadId')
+      if (!threadId) throw new Error('缺少 threadId')
+      const ui = await threadUIMessages(threadId)
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify(ui))
+    } catch (err) {
+      console.error('[messages] 出错:', err)
       res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
     }
