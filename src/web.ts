@@ -20,6 +20,7 @@ import { aggregateLibrary } from './lib/library.js'
 import { firstUserText, deriveThreadTitle } from './lib/threads.js'
 import { safePdfName } from './lib/ingest-upload.js'
 import { ensureIndex, cachedOcrPages, chunkPages, upsertRecords } from './lib/ingest-pipeline.js'
+import { authConfigured, checkCredentials, issueToken, authedUser, sessionCookie, clearedCookie } from './lib/auth.js'
 
 const PORT = Number(process.env.PORT) || 4111
 const RESOURCE_ID = 'web-user'
@@ -107,6 +108,39 @@ function lastUserText(messages: any[]): string {
 }
 
 const server = createServer(async (req, res) => {
+  const path = (req.url || '').split('?')[0]
+  const json = (code: number, obj: unknown) => {
+    res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify(obj))
+  }
+
+  // —— 鉴权（ADR-0007）：单 admin、httpOnly 签名 cookie ——
+  if (req.method === 'POST' && path === '/api/login') {
+    if (!authConfigured()) return json(500, { error: '鉴权未配置：请在 .env 设置 ADMIN_USER/ADMIN_PASSWORD/SESSION_SECRET' })
+    try {
+      const { user, password } = JSON.parse(await readBody(req))
+      if (!checkCredentials(String(user ?? ''), String(password ?? ''))) return json(401, { error: '账号或密码错误' })
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'set-cookie': sessionCookie(issueToken()) })
+      res.end(JSON.stringify({ user }))
+    } catch {
+      return json(400, { error: '请求格式错误' })
+    }
+    return
+  }
+  if (req.method === 'POST' && path === '/api/logout') {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'set-cookie': clearedCookie() })
+    res.end(JSON.stringify({ ok: true }))
+    return
+  }
+  if (path === '/api/me') {
+    const user = authedUser(req)
+    return user ? json(200, { user }) : json(401, { error: '未登录' })
+  }
+  // 其余 /api/* 一律要登录（静态资源公开，以便加载登录页）。
+  if (path.startsWith('/api/') && !authedUser(req)) {
+    return json(401, { error: '未登录' })
+  }
+
   if (req.method === 'POST' && req.url === '/api/chat') {
     const t0 = Date.now()
     let q = ''
