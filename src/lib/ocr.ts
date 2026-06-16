@@ -1,6 +1,6 @@
 // 扫描件 OCR：PaddleOCR-VL-1.6 托管 API（ADR-0003）。
 // 直接上传 PDF 拿 markdown，不本地渲染、不引 Python。
-// 用 Node 全局 fetch 直连 REST API（Simplicity First），流程对齐 ocr_compare/paddle_vl_ocr.py：
+// 用 Node 全局 fetch 直连 REST API（Simplicity First），流程对齐 docs/research/ocr_compare/paddle_vl_ocr.py：
 //   提交 job → 轮询到 done → 拉 jsonl 结果 → 逐页 markdown。
 // 指标表格在 markdown 里以带 rowspan/colspan 的 HTML 表格保留，合并单元格不丢。
 

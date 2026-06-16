@@ -90,8 +90,8 @@ export function matchKnownCode(query: string, knownCodes: readonly string[]): st
 
 /** 把命中块整理成给 Agent 读的文本：每条带来源锚点。 */
 export function formatHits(hits: { text: string; metadata: ChunkMeta }[]): string {
-  if (hits.length === 0) return '【国标库】未检索到相关内容。'
-  const lines = ['【国标库检索结果 · 国标库来源】']
+  if (hits.length === 0) return '【本地库】未检索到相关内容。'
+  const lines = ['【本地库检索结果 · 本地库来源】']
   hits.forEach((h, i) => {
     const m = h.metadata
     const where = `${m.标准号}｜${m.表名 || '正文'}｜第 ${m.页码} 页`

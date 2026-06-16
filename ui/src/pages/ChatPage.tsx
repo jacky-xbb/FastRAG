@@ -15,7 +15,7 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { Loader } from '@/components/ai-elements/loader'
-import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
+import { Suggestion } from '@/components/ai-elements/suggestion'
 import { useThreads } from '../lib/useThreads'
 import { SUGGESTIONS } from '../lib/mockData'
 
@@ -67,6 +67,7 @@ export function ChatPage() {
   const { threadId: param } = useParams()
   const navigate = useNavigate()
   const idRef = useRef(newThreadId()) // 当前会话 id（/chat 新会话用；深链时由下方 effect 切到 param）
+  const loadedRef = useRef<string | null>(null) // 已拉过历史的 threadId（StrictMode 双跑 / 覆盖守卫）
   const transport = useRef(
     new DefaultChatTransport({
       api: '/api/chat',
@@ -82,14 +83,19 @@ export function ChatPage() {
     onFinish: () => refreshThreads(),
   })
 
-  // URL 带 :threadId 且与当前不同 → 加载该会话历史（深链 / 刷新 / 点历史）。
+  // URL 带 :threadId 且尚未拉过 → 加载该会话历史（深链 / 刷新 / 点历史）。
+  // 守卫用 loadedRef（成功后才记），不拿 idRef 自卡：否则 StrictMode 双跑时第一次的 fetch 被清理取消、第二次又被守卫挡掉，历史拉不进来。
   useEffect(() => {
-    if (!param || param === idRef.current) return
+    if (!param || param === loadedRef.current) return
     idRef.current = param
     let alive = true
     fetch('/api/messages?threadId=' + encodeURIComponent(param))
       .then((r) => (r.ok ? r.json() : []))
-      .then((msgs) => alive && setMessages(msgs as UIMessage[]))
+      .then((msgs) => {
+        if (!alive) return
+        setMessages(msgs as UIMessage[])
+        loadedRef.current = param
+      })
       .catch(() => alive && setMessages([]))
     return () => {
       alive = false
@@ -106,7 +112,11 @@ export function ChatPage() {
     if (!text.trim()) return
     sendMessage({ text })
     // 新会话首次发送：把 id 写进 URL，深链/刷新可回到这条对话。
-    if (!param) navigate('/chat/' + idRef.current, { replace: true })
+    // 先标记该会话已"加载"，免得下方 effect 因 param 变化去拉历史、覆盖正在进行的对话。
+    if (!param) {
+      loadedRef.current = idRef.current
+      navigate('/chat/' + idRef.current, { replace: true })
+    }
   }
 
   const activeId = param ?? idRef.current
@@ -138,16 +148,6 @@ export function ChatPage() {
       <main className="flex flex-1 flex-col overflow-hidden">
         <Conversation className="flex-1">
           <ConversationContent>
-            {messages.length === 0 && (
-              <div className="mx-auto max-w-lg pt-10">
-                <div className="mb-2 text-sm text-zinc-500">试试这些：</div>
-                <Suggestions>
-                  {SUGGESTIONS.map((s) => (
-                    <Suggestion key={s} suggestion={s} onClick={(t) => send(t)} />
-                  ))}
-                </Suggestions>
-              </div>
-            )}
             {messages.map((m) => (
               <Message from={m.role} key={m.id}>
                 <MessageContent>
@@ -158,7 +158,14 @@ export function ChatPage() {
             {status === 'submitted' && <Loader />}
           </ConversationContent>
         </Conversation>
-        <div className="border-t border-zinc-800 p-3">
+        <div className="p-3">
+          {messages.length === 0 && (
+            <div className="mb-2 flex flex-wrap justify-center gap-2">
+              {SUGGESTIONS.map((s) => (
+                <Suggestion key={s} suggestion={s} onClick={(t) => send(t)} />
+              ))}
+            </div>
+          )}
           <PromptInput onSubmit={(msg) => send(msg.text ?? '')}>
             <PromptInputBody>
               <PromptInputTextarea placeholder="检索国标…（Enter 发送）" />
@@ -194,7 +201,7 @@ export function ChatPage() {
           <ul className="mt-2 space-y-1.5">
             {sources.map((s, i) => (
               <li key={i} className={`rounded-md border px-2.5 py-2 text-xs ${s.web ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
-                <div className="font-medium">{s.web ? '🌐 联网' : '📑 国标库'}</div>
+                <div className="font-medium">{s.web ? '🌐 联网' : '📑 本地库'}</div>
                 <div className="font-mono">{s.code}{s.page ? ` · 第 ${s.page} 页` : ''}{s.table ? ` · ${s.table}` : ''}</div>
               </li>
             ))}

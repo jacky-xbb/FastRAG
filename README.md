@@ -48,11 +48,6 @@ npm run ingest                      # 入库默认标的 GBT 18242-2025（走 OC
 npm run ingest -- "pdf/xxx.pdf"     # 入库指定 PDF（走 OCR，缓存命中则免费）
 npm run ingest -- --all             # 全量：pdf/ 下全部，均走 OCR（缓存命中则免费）
 npm run ingest -- --all --plan      # 只预演：列出哪些走付费 OCR，不入库、不扣费
-npm run ocr                         # OCR 默认扫描件 GBT 23457-2017 → ocr_out.md
-npm run ocr -- "pdf/xxx.pdf" out.md # 扫描件 PDF → markdown（PaddleOCR-VL）
-npm run ask                         # 默认跑两轮对话（演示多轮记忆）
-npm run ask -- "你的问题"
-npm run ask -- "第1问" "第2问"      # 多参数 = 同一会话里的多轮提问
 npm run web                         # 起本地对话界面 → http://localhost:4111
 ```
 
