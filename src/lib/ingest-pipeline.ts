@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { embedMany } from 'ai'
 import { ocrPdfToPages } from './ocr.js'
-import { chunkOcrPages, type IndicatorChunk } from './indicator-chunk.js'
+import { chunkOcrPages, type IndicatorChunk, type ProseMode } from './indicator-chunk.js'
 import type { PageText } from './chunk.js'
 import { embedModel, EMBED_DIMENSION, INDEX_NAME } from './openrouter.js'
 import { libsqlVector } from '../mastra/index.js'
@@ -34,9 +34,15 @@ export async function cachedOcrPages(pdfPath: string): Promise<PageText[]> {
   return pages
 }
 
-/** 逐页 markdown → 指标行块（ADR-0004，表名/指标名/页码作锚点）。 */
-export function chunkPages(pages: PageText[], fileName: string): IndicatorChunk[] {
-  const records = chunkOcrPages(pages, { fileName, size: 800, overlap: 100 })
+/** 逐页 markdown → 指标行块（ADR-0004，表名/指标名/页码作锚点）。
+ *  表外正文切法由 PROSE_MODE 环境变量选（fixed/recursive/markdown），默认 markdown：
+ *  国标正文是 `## N 条款` 结构，markdown 沿条款边界切，「原理/步骤/术语」不被切散，
+ *  正文召回 84.4% > fixed 81.3%（见 scripts/compare-prose.sh，严格更优、无回退）。
+ *  正文块大小默认 1500（给整条款留整块空间），可由 PROSE_MAX_SIZE 覆盖。 */
+export async function chunkPages(pages: PageText[], fileName: string): Promise<IndicatorChunk[]> {
+  const proseMode = (process.env.PROSE_MODE as ProseMode) ?? 'markdown'
+  const size = Number(process.env.PROSE_MAX_SIZE) || 1500
+  const records = await chunkOcrPages(pages, { fileName, size, overlap: 200, proseMode })
   const tableChunks = records.filter((r) => r.metadata.指标名).length
   console.log(
     `[ingest] ${fileName}：${pages.length} 页 → ${records.length} 块（含 ${tableChunks} 指标行）`,

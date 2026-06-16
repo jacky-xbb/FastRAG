@@ -15,18 +15,23 @@
 //   npx tsx test/eval.ts --filtered  # 带标准号过滤的 P0（产线路径，案例5 这类应转绿）
 //   npx tsx test/eval.ts --llm       # 额外端到端跑 Agent，测 P2 来源标注（耗对话 token）
 //   npx tsx test/eval.ts --k 10      # 改 Recall@K 的 K（默认 6，与线上 topK 一致）
+//   npx tsx test/eval.ts --prose     # 换正文评测集（试验步骤/范围/术语），判分=关键词文本命中
 
 import 'dotenv/config'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { hybridSearch } from '../src/lib/retrieve.js'
-import { matchesFilter, norm, type ChunkFilter, type ChunkMeta } from '../src/lib/hybrid.js'
+import { hybridSearch, type HybridHit } from '../src/lib/retrieve.js'
+import { matchesFilter, norm, type ChunkFilter } from '../src/lib/hybrid.js'
 import { libsqlVector, mastra, GENERATE_MAX_STEPS } from '../src/mastra/index.js'
+
+// 正文题的 groundTruth 多一个 keywords：答案在正文（无指标名可匹配），
+// 改判「召回块文本是否含全部关键词」（见 --prose）。
+type GroundTruth = ChunkFilter & { keywords?: string[] }
 
 interface EvalCase {
   input: { query: string }
-  groundTruth: ChunkFilter
+  groundTruth: GroundTruth
   tags?: string[]
   note?: string
 }
@@ -34,18 +39,31 @@ interface EvalCase {
 const here = dirname(fileURLToPath(import.meta.url))
 const useLlm = process.argv.includes('--llm')
 const filtered = process.argv.includes('--filtered')
+// --prose：换正文评测集，判分改「关键词文本命中」而非「指标名元数据匹配」。
+const prose = process.argv.includes('--prose')
+const datasetFile = prose ? 'eval-prose-dataset.jsonl' : 'eval-dataset.jsonl'
 const kArg = process.argv.indexOf('--k')
 const K = kArg >= 0 ? Number(process.argv[kArg + 1]) : 6
 
-const cases: EvalCase[] = readFileSync(join(here, 'eval-dataset.jsonl'), 'utf8')
+const cases: EvalCase[] = readFileSync(join(here, datasetFile), 'utf8')
   .split('\n')
   .filter((l) => l.trim())
   .map((l) => JSON.parse(l) as EvalCase)
 
-/** 第一个命中 groundTruth 的块在 top-K 里的 1-based 名次；0 = 未召回。 */
-function rankOfFirstMatch(hits: { metadata: ChunkMeta }[], gt: ChunkFilter): number {
+/** 第一个命中 groundTruth 的块在 top-K 里的 1-based 名次；0 = 未召回。
+ *  指标题：元数据匹配（标准号+指标名）。
+ *  正文题（gt.keywords）：标准号匹配 + 全部关键词出现在「同一」召回块文本里——
+ *  这恰好量「答案有没有被切块切散」，是区分正文切法好坏的关键。 */
+function rankOfFirstMatch(hits: HybridHit[], gt: GroundTruth): number {
   for (let i = 0; i < hits.length; i++) {
-    if (matchesFilter(hits[i].metadata, gt)) return i + 1
+    const h = hits[i]
+    if (gt.keywords?.length) {
+      const codeOk = matchesFilter(h.metadata, { 标准号: gt.标准号 })
+      const text = norm(h.text)
+      if (codeOk && gt.keywords.every((k) => text.includes(norm(k)))) return i + 1
+    } else if (matchesFilter(h.metadata, gt)) {
+      return i + 1
+    }
   }
   return 0
 }
@@ -62,8 +80,9 @@ async function main() {
     srcAnsTotal = 0
 
   const mode = filtered ? '带标准号过滤' : '裸召回'
+  const kind = prose ? '正文召回' : '指标召回'
   console.log(
-    `\n=== 检索评测 · Recall@${K} · ${mode}${useLlm ? ' + 来源标注' : ''} · 共 ${cases.length} 题 ===\n`,
+    `\n=== 检索评测(${kind}) · Recall@${K} · ${mode}${useLlm ? ' + 来源标注' : ''} · 共 ${cases.length} 题 ===\n`,
   )
 
   for (const [i, c] of cases.entries()) {

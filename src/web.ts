@@ -251,7 +251,7 @@ const server = createServer(async (req, res) => {
       const pages = await cachedOcrPages(pdfPath)
 
       send({ type: 'stage', stage: 'chunk' })
-      const records = chunkPages(pages, fileName)
+      const records = await chunkPages(pages, fileName)
 
       let lastStage = ''
       await upsertRecords(records, (stage) => {

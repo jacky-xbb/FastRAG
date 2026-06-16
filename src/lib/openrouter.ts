@@ -20,7 +20,8 @@ export const chatModel = openrouter.chat('deepseek/deepseek-v4-flash')
 /** embedding 模型（1536 维）。入库与检索必须用同一个，否则向量空间对不上。 */
 export const embedModel = openrouter.textEmbeddingModel('openai/text-embedding-3-small')
 
-/** 入库与检索共用：libSQL 向量库文件 + 索引名 + 维度。 */
-export const VECTOR_DB_URL = 'file:./vector.db'
+/** 入库与检索共用：libSQL 向量库文件 + 索引名 + 维度。
+ *  VECTOR_DB_URL 可由环境变量覆盖，用于建独立的对比库（切法 A/B 实验），不碰现状 vector.db。 */
+export const VECTOR_DB_URL = process.env.VECTOR_DB_URL ?? 'file:./vector.db'
 export const INDEX_NAME = 'standards'
 export const EMBED_DIMENSION = 1536

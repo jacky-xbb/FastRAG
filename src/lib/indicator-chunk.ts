@@ -5,6 +5,7 @@
 // 表外正文走定长字符切块（复用 splitIntoChunks），同样挂上元数据。
 
 import { basename } from 'node:path'
+import { MDocument } from '@mastra/rag'
 import { splitIntoChunks, type PageText, type ChunkOptions } from './chunk.js'
 
 export type Status = '现行' | '废止'
@@ -209,20 +210,37 @@ export function isReceiptNoise(text: string): boolean {
   return /零售|码洋|实洋|折扣额|收款方式|出货方式|录入员|会员姓名|出版社/.test(text)
 }
 
+/** 表外正文切法：fixed=定长（默认/现状）；recursive/markdown=Mastra 官方切块策略（切法实验）。 */
+export type ProseMode = 'fixed' | 'recursive' | 'markdown'
+
+/** 表外正文切块。fixed 走定长（现状）；其余走 Mastra 官方 MDocument 策略。空白返回空数组。 */
+async function splitProse(prose: string, mode: ProseMode, opts: ChunkOptions): Promise<string[]> {
+  if (!prose.trim()) return []
+  if (mode === 'fixed') return splitIntoChunks(prose, opts)
+  const chunks = await MDocument.fromMarkdown(prose).chunk({
+    strategy: mode,
+    maxSize: opts.size,
+    overlap: opts.overlap,
+  })
+  return chunks.map((c) => c.text.trim()).filter(Boolean)
+}
+
 /**
- * 把 OCR 出的逐页 markdown 切块：表格按指标行切，表外正文按定长字符切。
+ * 把 OCR 出的逐页 markdown 切块：表格按指标行切，表外正文按 proseMode 切。
  * 标准号/状态由调用方（或文件名）给定，每块都带全套元数据。
  * 入库前剔除购书小票噪声块（isReceiptNoise）。
  */
-export function chunkOcrPages(
+export async function chunkOcrPages(
   pages: PageText[],
   opts: {
     fileName: string
     标准号?: string
     状态?: Status
     标准名称?: string
+    /** 表外正文切法（默认 fixed）。见 ProseMode。 */
+    proseMode?: ProseMode
   } & ChunkOptions,
-): IndicatorChunk[] {
+): Promise<IndicatorChunk[]> {
   const { fileName, size, overlap } = opts
   const 标准号 = opts.标准号 ?? standardCodeFromFileName(fileName)
   const 状态 = opts.状态 ?? statusFromFileName(fileName)
@@ -248,9 +266,11 @@ export function chunkOcrPages(
     }
     proseParts.push(text.slice(last))
 
-    // 表外正文：去掉 HTML 标签后定长切块，前缀挂标准号+产品名（散文块否则无锚点），表名/指标名留空。
+    // 表外正文：去掉 HTML 标签后切块，前缀挂标准号+产品名（散文块否则无锚点），表名/指标名留空。
+    // markdown：结构感知切块（标题优先、超长回切、碎块合并）；fixed：定长（现状）。
     const prose = proseParts.join('\n').replace(/<[^>]+>/g, ' ')
-    for (const chunk of splitIntoChunks(prose, { size, overlap })) {
+    const proseChunks = await splitProse(prose, opts.proseMode ?? 'fixed', { size, overlap })
+    for (const chunk of proseChunks) {
       records.push({
         text: namePrefix ? `${namePrefix} / ${chunk}` : chunk,
         metadata: { fileName, 标准号, 表名: '', 指标名: '', 页码: page, 状态 },

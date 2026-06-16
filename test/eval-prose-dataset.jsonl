@@ -1,0 +1,32 @@
+{"input":{"query":"GB/T 328.21 高分子防水卷材接缝剥离性能的试验步骤是怎样的？"},"groundTruth":{"标准号":"GB/T 328.21","keywords":["夹具","拉伸速度","试件分离"]},"tags":["method"],"note":"试验步骤在正文（非指标表）；三词共现于「8 步骤」段，定长切若切散则单块不全含"}
+{"input":{"query":"GB/T 328.21 接缝剥离性能试验的原理是什么？"},"groundTruth":{"标准号":"GB/T 328.21","keywords":["恒定速度","搭接缝","拉力"]},"tags":["method"],"note":"「4 原理」：以恒定速度拉伸试件剥离搭接缝至破坏，连续记录拉力"}
+{"input":{"query":"GB/T 328.18 沥青防水卷材撕裂性能（钉杆法）的试验原理？"},"groundTruth":{"标准号":"GB/T 328.18","keywords":["钉杆","刺穿","垂直"]},"tags":["method"],"note":"「4 原理」：用钉杆刺穿试件、与钉杆成垂直的力进行撕裂"}
+{"input":{"query":"GB/T 328.18 钉杆法撕裂试验用多大直径的尖钉？拉伸速度多少？"},"groundTruth":{"标准号":"GB/T 328.18","keywords":["尖钉","直径","拉伸速度"]},"tags":["method"],"note":"「8 步骤」：直径(2.5±0.1)mm 尖钉，拉伸速度(100±10)mm/min"}
+{"input":{"query":"GB/T 328.27 防水卷材吸水性试验怎么处理试件表面？用什么吸干水分？"},"groundTruth":{"标准号":"GB/T 328.27","keywords":["毛刷","隔离材料","纸巾"]},"tags":["method"],"note":"「7 步骤」：毛刷刷除隔离材料、纸巾吸干表面水分"}
+{"input":{"query":"GB/T 328.27 吸水率怎么计算？取几块试件的平均值？"},"groundTruth":{"标准号":"GB/T 328.27","keywords":["吸水率","三块试件","算术平均值"]},"tags":["method"],"note":"「8 结果计算」：吸水率取三块试件的算术平均值，精确到0.1%"}
+{"input":{"query":"GB/T 18242 SBS/APP 改性沥青防水卷材以什么为主要原料？胎基是什么？"},"groundTruth":{"标准号":"GB/T 18242","keywords":["石油沥青","改性剂","胎基"]},"tags":["scope"],"note":"「1 范围」：以石油沥青为主要原料、SBS/APP 为改性剂、聚酯毡玻纤毡为胎基"}
+{"input":{"query":"GB/T 18242 的防水卷材按胎基分为哪两类？"},"groundTruth":{"标准号":"GB/T 18242","keywords":["胎基","聚酯毡","玻纤毡"]},"tags":["classification"],"note":"「4.1 分类」：按胎基分为聚酯毡(PY)和玻纤毡(G)"}
+{"input":{"query":"GB/T 23457 预铺防水卷材适用于与什么粘结？"},"groundTruth":{"标准号":"GB/T 23457","keywords":["自粘胶","后浇混凝土","粘结"]},"tags":["scope"],"note":"「1 范围」：一面有自粘胶、与后浇混凝土粘结"}
+{"input":{"query":"高分子防水卷材接缝剥离性能的试验步骤？"},"groundTruth":{"标准号":"GB/T 328.21","keywords":["夹具","拉伸速度","试件分离"]},"tags":["method","no-code"],"note":"不带标准号的步骤题：试验方法标准产品名锚点弱，测裸召回底线"}
+{"input":{"query":"防水卷材吸水性试验怎么做？要刷掉什么、用什么吸干？"},"groundTruth":{"标准号":"GB/T 328.27","keywords":["毛刷","隔离材料","纸巾"]},"tags":["method","no-code"],"note":"不带标准号 + 口语问法，测正文裸召回"}
+{"input":{"query":"SBS 改性沥青防水卷材以什么为主要原料？"},"groundTruth":{"标准号":"GB/T 18242","keywords":["石油沥青","改性剂"]},"tags":["scope","no-code"],"note":"不带标准号、用产品名（SBS）问范围正文，靠产品名锚点召回"}
+{"input":{"query":"JTS/T 232 钢筋弯曲试验的步骤？试验后看什么、记录什么？"},"groundTruth":{"标准号":"JTS/T 232","keywords":["弯曲力","可见裂纹","弯曲半径"]},"tags":["method","long-section"],"note":"长正文节（弯曲试验>1200字）；三词在节尾，定长若边界穿过则切散——长内容是切法区分点"}
+{"input":{"query":"JTS/T 232 焊接接头拉伸试验测定什么？判断什么？"},"groundTruth":{"标准号":"JTS/T 232","keywords":["焊接接头","抗拉强度","断口"]},"tags":["method","long-section"],"note":"长正文节（焊接接头拉伸>1800字）；核心句在节首，测长节首部召回稳定性"}
+{"input":{"query":"GB/T 23457-2017 预铺防水卷材代替了哪个旧标准？"},"groundTruth":{"标准号":"GB/T 23457","keywords":["代替","湿铺","2009"]},"tags":["front-matter"],"note":"前言（>1300字必被定长切散）：代替 GB/T 23457—2009《预铺/湿铺防水卷材》"}
+{"input":{"query":"钢筋弯曲试验后怎么判定？要记录什么？"},"groundTruth":{"标准号":"JTS/T 232","keywords":["可见裂纹","弯曲角度"]},"tags":["method","no-code","long-section"],"note":"不带标准号 + 长节正文：双重难度，测裸召回在长内容上的表现"}
+{"input":{"query":"湿铺防水卷材用在什么工程？靠什么和基层粘结？"},"groundTruth":{"标准号":"GB/T 35467","keywords":["非外露","水泥","混凝土基层"]},"tags":["scope","no-code"],"note":"无号·用途：非外露防水工程，水泥净浆/砂浆与混凝土基层粘结"}
+{"input":{"query":"湿铺防水卷材的型式检验在哪些情况下要做？"},"groundTruth":{"标准号":"GB/T 35467","keywords":["型式检验","新产品","停产"]},"tags":["inspection","no-code"],"note":"无号·检验规则：新产品投产/每年一次/停产6个月恢复等"}
+{"input":{"query":"道桥用改性沥青防水卷材适用在什么地方？"},"groundTruth":{"标准号":"JC/T 974","keywords":["道路","桥梁","沥青混凝土"]},"tags":["scope","no-code"],"note":"无号·范围：水泥混凝土面层的道路桥梁、上铺沥青混凝土层"}
+{"input":{"query":"道桥防水卷材里 APP Ⅱ 型主要用在什么铺装？"},"groundTruth":{"标准号":"JC/T 974","keywords":["浇注式","沥青混凝土","铺装"]},"tags":["scope","no-code"],"note":"无号·用途：APPⅡ型用于浇注式沥青混凝土混合料铺装"}
+{"input":{"query":"路桥用塑性体改性沥青防水卷材的胎基和改性剂是什么？"},"groundTruth":{"标准号":"JT/T 536","keywords":["聚酯毡","无规聚丙烯","改性剂"]},"tags":["term","no-code"],"note":"无号·术语定义：聚酯毡为胎基、无规聚丙烯(APP)为改性剂"}
+{"input":{"query":"沥青加铺层抗裂贴按施工方式分成哪几类？"},"groundTruth":{"标准号":"JT/T 971","keywords":["施工方式","热粘型","自粘型"]},"tags":["classification","no-code"],"note":"无号·分类：按施工方式分热粘型、自粘型"}
+{"input":{"query":"抗裂贴拉伸试验的试件多宽？试验前怎么放置？"},"groundTruth":{"标准号":"JT/T 971","keywords":["试件宽","相对湿度","放置"]},"tags":["method","no-code"],"note":"无号·试验步骤：试件宽50mm、25℃相对湿度30%~70%放置24h"}
+{"input":{"query":"铁路桥梁混凝土桥面防水层适用于什么桥面？"},"groundTruth":{"标准号":"TB/T 2965","keywords":["铁路桥梁","有砟","无砟"]},"tags":["scope","no-code"],"note":"无号·范围：铁路桥梁有砟、无砟混凝土桥面防水层"}
+{"input":{"query":"铁路桥面防水层按材料分成哪些类型？"},"groundTruth":{"标准号":"TB/T 2965","keywords":["卷材类","氯化聚乙烯","聚氨酯"]},"tags":["classification","no-code"],"note":"无号·分类：卷材类(氯化聚乙烯/高聚物改性沥青)、涂料类(聚氨酯)"}
+{"input":{"query":"铁路隧道防水板适用于多高时速的工程？"},"groundTruth":{"标准号":"TB/T 3360.1","keywords":["时速","160","隧道"]},"tags":["scope","no-code"],"note":"无号·范围：适用于时速160km以下铁路隧道工程"}
+{"input":{"query":"防水卷材抗冲击穿刺试验的原理是什么？用什么做支撑？"},"groundTruth":{"标准号":"GB/T 328.24","keywords":["重锤","穿刺","发泡聚苯乙烯"]},"tags":["method","no-code"],"note":"无号·原理：自由下落重锤冲击穿刺，发泡聚苯乙烯做支撑"}
+{"input":{"query":"高分子防水卷材撕裂性能（梯形/割口法）的试验原理？"},"groundTruth":{"标准号":"GB/T 328.19","keywords":["撕裂","恒定速度","最高点"]},"tags":["method","no-code"],"note":"无号·原理：恒定速度产生均匀撕裂力至破坏，记录最高点的力"}
+{"input":{"query":"沥青防水卷材接缝剥离性能怎么测？夹具间距多少？"},"groundTruth":{"标准号":"GB/T 328.20","keywords":["夹具","拉伸速度","试件分离"]},"tags":["method","no-code","cross-standard"],"note":"无号·跨标准：内容近 328.21，须召回到 328.20（夹具间距100mm、剥离至分离）"}
+{"input":{"query":"沥青防水卷材接缝剪切性能试验，夹具间距是多少？"},"groundTruth":{"标准号":"GB/T 328.22","keywords":["夹具","拉伸速度","试件破坏"]},"tags":["method","no-code","cross-standard"],"note":"无号·跨标准：剪切夹具间距200mm（区别于剥离100mm），须召回 328.22"}
+{"input":{"query":"氯化聚乙烯橡胶共混防水卷材的拉伸强度按哪个标准测？"},"groundTruth":{"标准号":"JC 684","keywords":["拉伸强度","断裂伸长率","528"]},"tags":["method","no-code"],"note":"无号·测定：拉伸强度、断裂伸长率按 GB/T 528（废止标准当普通文档，ADR-0005）"}
+{"input":{"query":"氯化聚乙烯橡胶共混防水卷材适用于什么卷材？"},"groundTruth":{"标准号":"JC 684","keywords":["氯化聚乙烯","硫化型","无织物"]},"tags":["scope","no-code"],"note":"无号·范围：氯化聚乙烯-橡胶共混、无织物增强的硫化型防水卷材"}

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import {
   normalizeCell,
   parseHtmlTable,
@@ -66,12 +66,15 @@ describe('chunkOcrPages（指标行切块）', () => {
     },
   ]
 
-  const records = chunkOcrPages(pages, {
-    fileName: 'GBT 23457-2017 预铺防水卷材.pdf',
-    标准号: 'GB/T 23457-2017',
-    状态: '现行',
-    size: 800,
-    overlap: 100,
+  let records: Awaited<ReturnType<typeof chunkOcrPages>>
+  beforeAll(async () => {
+    records = await chunkOcrPages(pages, {
+      fileName: 'GBT 23457-2017 预铺防水卷材.pdf',
+      标准号: 'GB/T 23457-2017',
+      状态: '现行',
+      size: 800,
+      overlap: 100,
+    })
   })
 
   it('每个指标行单独成块，前缀含标准号 + 表名 + 指标名', () => {
@@ -134,8 +137,8 @@ describe('standardNameFromFileName', () => {
 })
 
 describe('chunkOcrPages 块前缀含产品名（治本：用户用产品名问也召得回）', () => {
-  it('前缀加上从文件名提取的产品名', () => {
-    const recs = chunkOcrPages(
+  it('前缀加上从文件名提取的产品名', async () => {
+    const recs = await chunkOcrPages(
       [{ page: 1, text: `<div>表2</div>${table2}` }],
       { fileName: 'GBT 23457-2017 自粘聚合物改性沥青防水卷材.pdf', 标准号: 'GB/T 23457-2017', size: 800, overlap: 100 },
     )
