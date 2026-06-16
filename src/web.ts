@@ -12,6 +12,7 @@ import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, extname, normalize } from 'node:path'
+import { createUIMessageStream, pipeUIMessageStreamToResponse } from 'ai'
 import { mastra, GENERATE_MAX_STEPS } from './mastra/index.js'
 
 const PORT = Number(process.env.PORT) || 4111
@@ -67,64 +68,98 @@ function readBody(req: import('node:http').IncomingMessage): Promise<string> {
 
 const agent = mastra.getAgent('standardsAgent')
 
-// 把一次工具调用变成一句给用户看的检索进度（检索阶段无文本可流，用它撑住等待体验）。
-function toolLabel(payload: any): string {
-  const a = payload?.args ?? {}
-  if (payload?.toolName === 'webSearchTool') return `🌐 联网搜索：${a.query ?? ''}`
-  const term = a.standardCode || a.indicator || a.table || (a.query ? String(a.query).slice(0, 18) : '')
-  return `🔍 检索国标库：${term}`
+// 从 useChat 发来的 body 里取出最后一条用户消息的纯文本。
+// 前端 transport 只发 {messages:[最新一条], threadId}（服务端记忆为准，ADR-0006）；
+// 这里取最后一条 user 消息，无论前端发整段还是只发最新都成立。
+function lastUserText(messages: any[]): string {
+  const u = [...messages].reverse().find((m) => m?.role === 'user')
+  if (!u) return ''
+  const fromParts = (u.parts ?? [])
+    .filter((p: any) => p?.type === 'text')
+    .map((p: any) => p.text)
+    .join('')
+  return fromParts || u.content || ''
 }
 
 const server = createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/api/chat') {
     const t0 = Date.now()
     let q = ''
-    const sse = (obj: unknown) => res.write(`data: ${JSON.stringify(obj)}\n\n`)
     try {
-      const { message, threadId } = JSON.parse(await readBody(req))
-      if (!message || !threadId) throw new Error('缺少 message 或 threadId')
-      q = message
-      const stream = await agent.stream(message, {
+      const body = JSON.parse(await readBody(req))
+      const threadId: string | undefined = body.threadId
+      const text = lastUserText(body.messages ?? [])
+      if (!text || !threadId) throw new Error('缺少 message 或 threadId')
+      q = text
+
+      // Mastra 1.42 的 agent.stream 返回 MastraModelOutput（非 AI SDK 格式），
+      // 故用 ai 的 createUIMessageStream 把 fullStream 桥接成 AI SDK UI-message 流，
+      // 再 pipe 到 Node res，让前端 useChat / ai-elements 原生消费（ADR-0006）。
+      const result = await agent.stream(text, {
         memory: { thread: threadId, resource: RESOURCE_ID },
         maxSteps: GENERATE_MAX_STEPS,
       })
-      res.writeHead(200, {
-        'content-type': 'text/event-stream; charset=utf-8',
-        'cache-control': 'no-cache',
-        connection: 'keep-alive',
+
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          const id = 'txt'
+          let started = false
+          let full = ''
+          for await (const chunk of result.fullStream as AsyncIterable<any>) {
+            if (chunk.type === 'text-delta') {
+              const delta = chunk.payload?.text ?? ''
+              if (!delta) continue
+              if (!started) {
+                writer.write({ type: 'text-start', id })
+                started = true
+              }
+              full += delta
+              writer.write({ type: 'text-delta', id, delta })
+            } else if (chunk.type === 'tool-call') {
+              // 工具调用 → tool part（证据面板/ai-elements Tool 渲染检索/联网轨迹）
+              const p = chunk.payload
+              writer.write({
+                type: 'tool-input-available',
+                toolCallId: p.toolCallId,
+                toolName: p.toolName,
+                input: p.args ?? {},
+              })
+            } else if (chunk.type === 'tool-result') {
+              // 工具结果 → tool output（前端解析其中的「标准号｜表名｜第X页」生成来源 chips）
+              const p = chunk.payload
+              writer.write({ type: 'tool-output-available', toolCallId: p.toolCallId, output: p.result })
+            }
+          }
+          // 检索步数用尽时 text 为空，补一句兜底，别留空气泡。
+          if (!full.trim()) {
+            if (!started) {
+              writer.write({ type: 'text-start', id })
+              started = true
+            }
+            writer.write({
+              type: 'text-delta',
+              id,
+              delta: '这次没能整理出答案（检索步数可能用尽）。把问题问得更具体些，或再试一次。',
+            })
+          }
+          if (started) writer.write({ type: 'text-end', id })
+          console.log(`[chat] ${Date.now() - t0}ms len=${full.length} q=${JSON.stringify(text)}`)
+        },
+        onError: (err) => {
+          console.error('[chat] stream 出错:', err)
+          return err instanceof Error ? err.message : String(err)
+        },
       })
-      // 遍历 fullStream：工具检索阶段无文本可流，改推「检索进度」让等待不再是死状态；
-      // 文本增量（text-delta）照常流；finish 事件带最终 finishReason 用于日志。
-      let full = ''
-      let finishReason = '?'
-      for await (const chunk of stream.fullStream as AsyncIterable<any>) {
-        if (chunk.type === 'text-delta') {
-          const t = chunk.payload?.text ?? ''
-          full += t
-          sse({ delta: t })
-        } else if (chunk.type === 'tool-call') {
-          sse({ status: toolLabel(chunk.payload) })
-        } else if (chunk.type === 'finish') {
-          finishReason = chunk.payload?.stepResult?.reason ?? finishReason
-        }
-      }
-      // 检索步数用尽时 text 为空，补一句兜底文案，别让界面留空气泡。
-      if (!full.trim()) {
-        full = '这次没能整理出答案（检索步数可能用尽）。把问题问得更具体些，或再试一次。'
-        sse({ delta: full })
-      }
-      sse({ done: true })
-      res.end()
-      console.log(`[chat] ${Date.now() - t0}ms finish=${finishReason} len=${full.length} q=${JSON.stringify(message)}`)
+
+      pipeUIMessageStreamToResponse({ response: res, stream })
     } catch (err) {
       console.error(`[chat] ${Date.now() - t0}ms 出错 q=${JSON.stringify(q)}:`, err)
       const msg = err instanceof Error ? err.message : String(err)
-      if (res.headersSent) {
-        sse({ error: msg })
-        res.end()
-      } else {
+      if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify({ error: msg }))
+      } else {
+        res.end()
       }
     }
     return

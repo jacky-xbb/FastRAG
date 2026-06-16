@@ -1,8 +1,21 @@
 // 国标问答工作台 —— 专业暗色 · 三栏（IDE 式）。
 // 设计语言：深底、高密度、等宽数字、证据前置。三屏：登录(split) → 导入(库+日志) → 三栏对话(含证据面板)。
 // 对话走真实 /api/chat；上传向量化、历史列表暂为示例数据（见 mockData.ts 的 TODO：待后端补 /api/ingest、/api/threads）。
-import { useState } from 'react'
-import { useStandardsChat } from './lib/useStandardsChat'
+import { useRef, useState } from 'react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport, type UIMessage } from 'ai'
+import { Conversation, ConversationContent } from '@/components/ai-elements/conversation'
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputSubmit,
+} from '@/components/ai-elements/prompt-input'
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
+import { Loader } from '@/components/ai-elements/loader'
+import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { useIngestSim } from './lib/useIngestSim'
 import { MOCK_LIBRARY, MOCK_SESSIONS, SUGGESTIONS, INGEST_STAGES } from './lib/mockData'
 
@@ -138,16 +151,65 @@ function Upload() {
   )
 }
 
-function Chat() {
-  const { messages, status, sendMessage } = useStandardsChat()
-  const [input, setInput] = useState('')
-  const last = [...messages].reverse().find((m) => m.role === 'assistant')
+// —— UIMessage parts 工具函数 ——
+type AnyPart = { type: string; text?: string; toolName?: string; state?: string; input?: unknown; output?: unknown; errorText?: string }
 
-  const submit = () => {
-    if (!input.trim()) return
-    sendMessage(input)
-    setInput('')
+const textOf = (m: UIMessage) =>
+  (m.parts as AnyPart[]).filter((p) => p.type === 'text').map((p) => p.text ?? '').join('')
+
+const toolPartsOf = (m: UIMessage) =>
+  (m.parts as AnyPart[]).filter((p) => p.type === 'dynamic-tool' || p.type.startsWith('tool-'))
+
+const toolNameOf = (p: AnyPart) => (p.type === 'dynamic-tool' ? p.toolName ?? '' : p.type.replace(/^tool-/, ''))
+
+interface Source { code: string; table: string; page: string; web: boolean }
+
+// 从 tool-output 字符串解析来源（hybridQueryTool 的 formatHits 是确定格式 `[标准号｜表名｜第X页]`，
+// 比解析模型自由措辞稳；ADR-0006）。webSearchTool 命中则记一条「联网」。
+function parseSources(parts: AnyPart[]): Source[] {
+  const out: Source[] = []
+  const seen = new Set<string>()
+  for (const p of parts) {
+    const web = toolNameOf(p) === 'webSearchTool'
+    if (web) {
+      if (p.output && !seen.has('web')) {
+        seen.add('web')
+        out.push({ code: '联网结果', table: '', page: '', web: true })
+      }
+      continue
+    }
+    const output = typeof p.output === 'string' ? p.output : ''
+    const re = /\[([^｜\]]+)｜([^｜\]]+)｜第\s*([\d、,，\-]+)\s*页\]/g
+    let mt: RegExpExecArray | null
+    while ((mt = re.exec(output))) {
+      const code = mt[1].trim()
+      const table = mt[2].trim()
+      const page = mt[3].trim()
+      const key = code + '|' + page
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ code, table, page, web: false })
+    }
   }
+  return out
+}
+
+function Chat() {
+  const threadId = useRef('web-' + Math.random().toString(36).slice(2))
+  const transport = useRef(
+    new DefaultChatTransport({
+      api: '/api/chat',
+      // 服务端记忆为准（ADR-0006）：只发最新一条 + threadId，历史靠后端 Mastra memory 续。
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: { messages: messages.slice(-1), threadId: threadId.current },
+      }),
+    }),
+  )
+  const { messages, status, sendMessage } = useChat({ transport: transport.current })
+
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+  const lastTools = lastAssistant ? toolPartsOf(lastAssistant) : []
+  const sources = parseSources(lastTools)
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -163,70 +225,72 @@ function Chat() {
         ))}
       </aside>
 
-      {/* 中：对话 */}
+      {/* 中：对话（ai-elements） */}
       <main className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex-1 space-y-4 overflow-y-auto p-5">
-          {messages.length === 0 && (
-            <div className="mx-auto max-w-lg pt-10">
-              <div className="text-sm text-zinc-500">试试这些：</div>
-              <div className="mt-2 space-y-1.5">
-                {SUGGESTIONS.map((s) => (
-                  <button key={s} onClick={() => sendMessage(s)} className="block w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-sm text-zinc-300 hover:border-emerald-500/50">
-                    {s}
-                  </button>
-                ))}
+        <Conversation className="flex-1">
+          <ConversationContent>
+            {messages.length === 0 && (
+              <div className="mx-auto max-w-lg pt-10">
+                <div className="mb-2 text-sm text-zinc-500">试试这些：</div>
+                <Suggestions>
+                  {SUGGESTIONS.map((s) => (
+                    <Suggestion key={s} suggestion={s} onClick={(t) => sendMessage({ text: t })} />
+                  ))}
+                </Suggestions>
               </div>
-            </div>
-          )}
-          {messages.map((m) =>
-            m.role === 'user' ? (
-              <div key={m.id} className="flex justify-end">
-                <div className="max-w-[80%] rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-100 ring-1 ring-emerald-500/20">{m.content}</div>
-              </div>
-            ) : (
-              <div key={m.id} className="max-w-[85%]">
-                <div className="prose-min whitespace-pre-wrap rounded-lg bg-zinc-900 px-3 py-2.5 text-sm text-zinc-200 ring-1 ring-zinc-800">
-                  {m.content || <span className="text-zinc-500">检索中…</span>}
-                </div>
-              </div>
-            ),
-          )}
-        </div>
+            )}
+            {messages.map((m) => (
+              <Message from={m.role} key={m.id}>
+                <MessageContent>
+                  {m.role === 'assistant' ? <MessageResponse>{textOf(m)}</MessageResponse> : textOf(m)}
+                </MessageContent>
+              </Message>
+            ))}
+            {status === 'submitted' && <Loader />}
+          </ConversationContent>
+        </Conversation>
         <div className="border-t border-zinc-800 p-3">
-          <div className="flex items-end gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
-              rows={1}
-              placeholder="检索国标… (Enter 发送)"
-              className="max-h-32 flex-1 resize-none bg-transparent px-1 py-1 text-sm text-zinc-100 outline-none"
-            />
-            <button onClick={submit} disabled={status !== 'ready' || !input.trim()} className="rounded-md bg-emerald-500 px-3 py-1.5 text-sm font-medium text-zinc-950 disabled:opacity-40">发送</button>
-          </div>
+          <PromptInput
+            onSubmit={(msg) => {
+              if (msg.text?.trim()) sendMessage({ text: msg.text })
+            }}
+          >
+            <PromptInputBody>
+              <PromptInputTextarea placeholder="检索国标…（Enter 发送）" />
+            </PromptInputBody>
+            <PromptInputFooter>
+              <PromptInputSubmit status={status} className="ml-auto" />
+            </PromptInputFooter>
+          </PromptInput>
         </div>
       </main>
 
-      {/* 右：证据面板 */}
-      <aside className="w-72 flex-none overflow-y-auto border-l border-zinc-800 bg-zinc-900/40 p-4 text-sm">
+      {/* 右：证据面板（接原生 tool parts） */}
+      <aside className="w-80 flex-none overflow-y-auto border-l border-zinc-800 bg-zinc-900/40 p-4 text-sm">
         <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">检索轨迹</div>
-        {last && last.trace.length > 0 ? (
-          <ul className="mt-2 space-y-1.5 font-mono text-[12px]">
-            {last.trace.map((t, i) => (
-              <li key={i} className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-zinc-400">{t}</li>
+        {lastTools.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            {lastTools.map((p, i) => (
+              <Tool key={i} defaultOpen={false}>
+                <ToolHeader type={p.type as `tool-${string}`} state={p.state as never} />
+                <ToolContent>
+                  <ToolInput input={p.input} />
+                  <ToolOutput output={p.output} errorText={p.errorText} />
+                </ToolContent>
+              </Tool>
             ))}
-          </ul>
+          </div>
         ) : (
           <p className="mt-2 text-xs text-zinc-600">提问后这里显示库内/联网检索过程。</p>
         )}
 
         <div className="mt-5 text-xs font-semibold uppercase tracking-wide text-zinc-500">来源引用</div>
-        {last && last.sources.length > 0 ? (
+        {sources.length > 0 ? (
           <ul className="mt-2 space-y-1.5">
-            {last.sources.map((s, i) => (
+            {sources.map((s, i) => (
               <li key={i} className={`rounded-md border px-2.5 py-2 text-xs ${s.web ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
                 <div className="font-medium">{s.web ? '🌐 联网' : '📑 国标库'}</div>
-                <div className="font-mono">{s.code}{s.page ? ` · 第 ${s.page} 页` : ''}</div>
+                <div className="font-mono">{s.code}{s.page ? ` · 第 ${s.page} 页` : ''}{s.table ? ` · ${s.table}` : ''}</div>
               </li>
             ))}
           </ul>
