@@ -1,0 +1,7 @@
+@import 'tailwindcss';
+
+/* 给 markdown 风格答案一点基础排版（原型够用即可） */
+.prose-min p { margin: 0.4em 0; }
+.prose-min ul { margin: 0.4em 0; padding-left: 1.2em; list-style: disc; }
+.prose-min ol { margin: 0.4em 0; padding-left: 1.2em; list-style: decimal; }
+.prose-min strong { font-weight: 600; }

@@ -1,144 +1,60 @@
-// 简单 web UI（#7）：串起混合检索（#4）+ 多轮记忆（#5）+ 联网兜底（#6）。
-// 复用已有 standardsAgent，不引前端框架——Node 内置 http 起一个本地服务：
-//   GET  /          → 单页对话界面（内联 HTML/CSS/JS）
-//   POST /api/chat  → {message, threadId} → 调 Agent，返回流式答案
-// 同一页面用一个 threadId 贯穿多轮，记忆落在与向量库同一个 libSQL 文件。
-//
-// 用法：npm run web  然后浏览器开 http://localhost:4111
+// 后端服务：API + 托管前端（#7）。串起混合检索（#4）+ 多轮记忆（#5）+ 联网兜底（#6）。
+// 复用已有 standardsAgent，Node 内置 http：
+//   POST /api/chat  → {message, threadId} → 调 Agent，返回流式答案（SSE）
+//   GET  /*         → 托管 ui/dist 的静态前端（SPA，未构建时给提示）
+// 前端代码在 ui/（Vite + React，专业暗色三栏工作台）。
+//   开发：npm run dev（本服务 :4111 + Vite :5173，/api 由 Vite 代理过来）
+//   生产：npm run ui:build 出 ui/dist，再 npm run web，本页直接托管
+// 同一会话用一个 threadId 贯穿多轮，记忆落在与向量库同一个 libSQL 文件。
 
 import 'dotenv/config'
 import { createServer } from 'node:http'
+import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join, extname, normalize } from 'node:path'
 import { mastra, GENERATE_MAX_STEPS } from './mastra/index.js'
 
 const PORT = Number(process.env.PORT) || 4111
 const RESOURCE_ID = 'web-user'
 
-const PAGE = `<!doctype html>
-<html lang="zh">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>防水卷材国标问答</title>
-<style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  body { font: 15px/1.6 system-ui, sans-serif; margin: 0; background: #f5f6f8; color: #1a1a1a; }
-  header { padding: 14px 20px; background: #1f2937; color: #fff; }
-  header h1 { margin: 0; font-size: 16px; }
-  header small { color: #9ca3af; }
-  #log { max-width: 760px; margin: 0 auto; padding: 20px 16px 120px; }
-  .msg { margin: 14px 0; display: flex; }
-  .msg.user { justify-content: flex-end; }
-  .bubble { max-width: 88%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-break: break-word; }
-  .user .bubble { background: #2563eb; color: #fff; border-bottom-right-radius: 2px; }
-  .bot .bubble { background: #fff; border: 1px solid #e5e7eb; border-bottom-left-radius: 2px; }
-  .pending .bubble { color: #6b7280; font-style: italic; }
-  form { position: fixed; bottom: 0; left: 0; right: 0; background: #f5f6f8;
-         border-top: 1px solid #e5e7eb; padding: 12px; }
-  .row { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; }
-  input { flex: 1; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
-  button { padding: 10px 18px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font: inherit; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
-</style>
-</head>
-<body>
-<header><h1>防水卷材国标问答 <small>库内优先 · 标来源 · 多轮记忆</small></h1></header>
-<div id="log"></div>
-<form id="f"><div class="row">
-  <input id="q" placeholder="如：GBT 18242-2025 中 I 型卷材的可溶物含量要求是多少？" autocomplete="off" autofocus />
-  <button id="send" type="submit">发送</button>
-</div></form>
-<script>
-  // 同一页面共用一个 threadId，多轮可互相引用（记忆）。
-  const threadId = 'web-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random());
-  const log = document.getElementById('log');
-  const form = document.getElementById('f');
-  const input = document.getElementById('q');
-  const send = document.getElementById('send');
+const DIST = join(process.cwd(), 'ui', 'dist')
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+}
 
-  // 建一个气泡，返回里面的文本容器（用于流式增量写入）。
-  function addBubble(role) {
-    const msg = document.createElement('div');
-    msg.className = 'msg ' + role;
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    msg.appendChild(bubble);
-    log.appendChild(msg);
-    window.scrollTo(0, document.body.scrollHeight);
-    return { msg, bubble };
+// 托管 ui/dist；找不到具体文件时回退 index.html（SPA）。未构建时给一句提示。
+async function serveStatic(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) {
+  if (!existsSync(join(DIST, 'index.html'))) {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    res.end('<h1>前端尚未构建</h1><p>开发：<code>npm run dev</code>（Vite :5173）。<br>生产：<code>npm run ui:build</code> 后再访问本页。</p>')
+    return
   }
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const message = input.value.trim();
-    if (!message) return;
-    addBubble('user').bubble.textContent = message;
-    input.value = '';
-    send.disabled = true;
-
-    const { msg, bubble } = addBubble('bot');
-    msg.classList.add('pending');
-    bubble.textContent = '检索中…';
-    let acc = '';
-    let started = false;
-    const statusLines = [];
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message, threadId }),
-      });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
-        msg.classList.remove('pending');
-        bubble.textContent = '出错了：' + (data.error || res.status);
-        return;
-      }
-      // 解析 SSE：每个事件是一行 data: {...}\\n\\n。
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const parts = buf.split('\\n\\n');
-        buf = parts.pop();
-        for (const part of parts) {
-          const line = part.replace(/^data: /, '').trim();
-          if (!line) continue;
-          let evt;
-          try { evt = JSON.parse(line); } catch (_) { continue; }
-          if (evt.status != null) {
-            // 检索进度：答案还没开始时，逐条显示「正在检索什么」，让等待不再是死状态。
-            if (!started) {
-              statusLines.push(evt.status);
-              bubble.textContent = statusLines.join('\\n');
-              window.scrollTo(0, document.body.scrollHeight);
-            }
-          } else if (evt.delta != null) {
-            if (!started) { started = true; msg.classList.remove('pending'); bubble.textContent = ''; }
-            acc += evt.delta;
-            bubble.textContent = acc;
-            window.scrollTo(0, document.body.scrollHeight);
-          } else if (evt.error) {
-            msg.classList.remove('pending');
-            bubble.textContent = '出错了：' + evt.error;
-          }
-        }
-      }
-    } catch (err) {
-      msg.classList.remove('pending');
-      bubble.textContent = '请求失败：' + err.message;
-    } finally {
-      send.disabled = false;
-      input.focus();
-    }
-  });
-</script>
-</body>
-</html>`
+  const urlPath = decodeURIComponent((req.url || '/').split('?')[0])
+  let filePath = join(DIST, normalize(urlPath))
+  if (!filePath.startsWith(DIST)) {
+    res.writeHead(403)
+    res.end('Forbidden')
+    return
+  }
+  if (urlPath === '/' || !existsSync(filePath)) filePath = join(DIST, 'index.html')
+  try {
+    const data = await readFile(filePath)
+    res.writeHead(200, { 'content-type': MIME[extname(filePath)] ?? 'application/octet-stream' })
+    res.end(data)
+  } catch {
+    res.writeHead(404)
+    res.end('Not Found')
+  }
+}
 
 function readBody(req: import('node:http').IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -160,12 +76,6 @@ function toolLabel(payload: any): string {
 }
 
 const server = createServer(async (req, res) => {
-  if (req.method === 'GET' && req.url === '/') {
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end(PAGE)
-    return
-  }
-
   if (req.method === 'POST' && req.url === '/api/chat') {
     const t0 = Date.now()
     let q = ''
@@ -220,10 +130,15 @@ const server = createServer(async (req, res) => {
     return
   }
 
+  if (req.method === 'GET') {
+    await serveStatic(req, res)
+    return
+  }
+
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
   res.end('Not Found')
 })
 
 server.listen(PORT, () => {
-  console.log(`[web] 国标问答界面已启动：http://localhost:${PORT}`)
+  console.log(`[web] 国标问答服务已启动：http://localhost:${PORT}`)
 })
