@@ -8,4 +8,4 @@
 - **指标表格**：PaddleOCR-VL 输出带 `rowspan/colspan` 的 HTML 表格，把「拉伸性能跨 5 行、P/PY/R 跨 3 列」这种合并单元格原样保留；Mistral 拍平成 markdown 会丢合并信息；PP-OCRv5 直接把表格打散成逐格散行，不可用。
 - **速度**：PaddleOCR-VL ~30s/份，Mistral ~5s/份。本项目是一次性离线入库（约 18 份），速度无所谓，**指标表格的准确度才是命门**——错字会直接污染检索与作答。
 
-代价：HTML 表格比 markdown 更占 token（VL 总体积约为 Mistral 两倍，多出来的全是标签）。后人若担心 chunk 体积想把 HTML 转 markdown，须先验证合并单元格拍平后指标值不会错位——否则宁可保留 HTML。对比脚本与三家结果留在 `ocr_compare/`。
+代价：HTML 表格比 markdown 更占 token（VL 总体积约为 Mistral 两倍，多出来的全是标签）。后人若担心 chunk 体积想把 HTML 转 markdown，须先验证合并单元格拍平后指标值不会错位——否则宁可保留 HTML。对比脚本与三家结果留在 `docs/research/ocr_compare/`。

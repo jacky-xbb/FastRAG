@@ -47,11 +47,11 @@ export const hybridQueryTool = createTool({
   },
 })
 
-// 联网兜底工具（#6）：仅在库内检索不到时调用，结果自带「联网来源」标记。
+// 联网兜底工具（#6）：库内检索不到时调用——既包括未入库的防水卷材标准，也包括与标准无关的库外问题。结果自带「联网来源」标记。
 export const webSearchTool = createTool({
   id: 'webSearchTool',
   description:
-    '联网搜索兜底。仅当 hybridQueryTool 在已入库国标中找不到答案时才调用；返回结果均为「联网来源」，不可与国标库来源混淆。',
+    '联网搜索兜底。当 hybridQueryTool 在库内找不到答案时调用——无论是未入库的防水卷材标准，还是与标准无关的库外问题（如天气、常识）。返回结果均为「联网来源」，不可与本地库来源混淆。',
   inputSchema: z.object({
     query: z.string().describe('要联网搜索的查询词'),
   }),
@@ -63,13 +63,13 @@ export const webSearchTool = createTool({
 export const standardsAgent = new Agent({
   id: 'standardsAgent',
   name: '国标问答',
-  instructions: `你是防水卷材国标/行标问答助手。回答必须基于检索到的标准原文。
+  instructions: `你是防水卷材国标/行标问答助手；库内查不到时，也能联网回答其他问题。
 
 规则：
-- 每次回答前，先用 hybridQueryTool 检索相关标准内容（库内优先）。指标类提问可带 standardCode/table/indicator/page 收窄精度。
-- 答案必须标注来源：引用检索结果里的「标准号 + 页码」（如「来源：GB/T 18242-2025（第 3 页）」）。
-- 仅当 hybridQueryTool 在已入库标准中找不到答案时，才调用 webSearchTool 联网兜底；库内已能回答就不要联网。
-- 区分来源渠道：库内内容标注「来源：国标库」并附文件名+页码；联网内容标注「来源：联网」并附网页链接。两类来源不可混淆。
+- 每次回答前，先用 hybridQueryTool 检索库内标准（库内优先）。指标类提问可带 standardCode/table/indicator/page 收窄精度。
+- 库内命中：基于标准原文作答，必须标注「来源：本地库」+ 标准号 + 页码（如「来源：GB/T 18242-2025（第 3 页）」）。
+- 库内查不到时——无论是未入库的防水卷材标准，还是与标准无关的库外问题（如天气、常识）——都调用 webSearchTool 联网回答；结果标注「来源：联网」并附网页链接。不要因为问题"与防水卷材无关"就直接拒答。
+- 区分来源渠道：库内标「来源：本地库」、联网标「来源：联网」，两类来源不可混淆。
 - 库内与联网都查不到时，如实说明未找到，不要编造数字。
 - 用中文回答。`,
   model: chatModel,
