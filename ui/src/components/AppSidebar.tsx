@@ -1,6 +1,6 @@
 // 历史会话侧栏（shadcn Sidebar）：品牌 + 新会话 + 历史列表（hover 改名/删除）。
 // 会话状态由 URL 决定（/chat/:threadId）；新会话 = navigate('/chat')，ChatPage 据无 param 清空对话。
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { FileUp, LogOut, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, User } from 'lucide-react'
 import {
@@ -51,6 +51,12 @@ export function AppSidebar() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const activeId = param ?? null
+  // 记住最近的检索台会话：切到「入库」时不更新（保留），点「检索台」可回到该会话而非开新会话。
+  // chat 模式下新会话空白态（无 param）记 null，保证「新会话」后切走再回来不被带回旧会话。
+  const lastChatId = useRef<string | null>(null)
+  useEffect(() => {
+    if (mode === 'chat') lastChatId.current = param ?? null
+  }, [mode, param])
 
   async function commitEdit(id: string) {
     const title = editValue.trim()
@@ -88,7 +94,7 @@ export function AppSidebar() {
         {/* 主导航：检索台 / 入库 分段切换（取代原顶栏 tab，入库不再被误当内容切换）。 */}
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/50 p-1">
           <button
-            onClick={() => navigate('/chat')}
+            onClick={() => navigate(lastChatId.current ? '/chat/' + lastChatId.current : '/chat')}
             className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-sm transition-colors ${
               mode === 'chat'
                 ? 'bg-sidebar text-sidebar-foreground shadow-sm'
