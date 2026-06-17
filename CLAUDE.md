@@ -1,6 +1,6 @@
 # CLAUDE.md — 防水卷材国标问答知识库
 
-本地运行的问答知识库：导入防水卷材类国标/行标 PDF，检索并对话作答，保留会话历史，必要时联网兜底。技术栈 Mastra(TS) + libSQL。术语见 [CONTEXT.md](CONTEXT.md)，调研全貌见 [docs/调研文档.md](docs/调研文档.md)。
+问答知识库：导入防水卷材类国标/行标 PDF，检索并对话作答，保留会话历史，必要时联网兜底。技术栈 Mastra(TS) + libSQL。部署在 **Cloudflare Workers**（前端 assets + API fetch handler + 入库 Workflow），libSQL 用 **Turso** 托管；本地开发 `wrangler dev` + vite，本地 CLI 入库（`npm run ingest`）作兜底。部署/迁移见 [ADR-0008](docs/adr/0008-deploy-cloudflare-turso.md) 与 [docs/部署-cloudflare.md](docs/部署-cloudflare.md)。术语见 [CONTEXT.md](CONTEXT.md)，调研全貌见 [docs/调研文档.md](docs/调研文档.md)。
 
 ## 硬约束（写代码必须遵守）
 
@@ -15,7 +15,7 @@
 
 ## key（.env，全大写）
 
-`OPENROUTER_API_KEY`（LLM）、`PADDLE_API_KEY`（OCR）、`TAVILY_API_KEY`（联网）。embedding 不再单连 OpenAI。
+`OPENROUTER_API_KEY`（LLM）、`PADDLE_API_KEY`（OCR）、`TAVILY_API_KEY`（联网）、`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`（libSQL 库地址/鉴权，不填则回退本地 `file:./vector.db`）、`ADMIN_USER`/`ADMIN_PASSWORD`/`SESSION_SECRET`（鉴权）。embedding 不再单连 OpenAI。线上这些走 Workers secrets（`wrangler secret put`）。
 
 ## 文档分工
 

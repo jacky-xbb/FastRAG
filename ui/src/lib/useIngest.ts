@@ -1,6 +1,6 @@
-// 上传向量化（#10）：POST /api/ingest（原始 PDF 字节，文件名走 ?name=），
-// 读 NDJSON 流逐阶段推真实进度（替掉 useIngestSim 的模拟）。
-// 事件：{type:'stage', stage} / {type:'done', pages, chunks} / {type:'error', message}。
+// 上传向量化（#10）：POST /api/ingest（原始 PDF 字节，文件名走 ?name=）拿入库任务 id，
+// 再轮询 /api/ingest/status?id= 读 Workflow 写在 R2 的真实进度（入库已上云，OCR 长任务走 Workflow）。
+// 进度 JSON：{stage:'upload'|'ocr'|'chunk'|'embed'} / {stage:'done', pages, chunks} / {stage:'error', message}。
 import { useCallback, useRef, useState } from 'react'
 import { INGEST_STAGES } from './mockData'
 
@@ -15,6 +15,7 @@ export interface IngestJob {
 }
 
 const stageIndex = (key: string) => INGEST_STAGES.findIndex((s) => s.key === key)
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function useIngest(onDone?: () => void) {
   const [job, setJob] = useState<IngestJob | null>(null)
@@ -33,37 +34,39 @@ export function useIngest(onDone?: () => void) {
           body: file,
           signal: ac.signal,
         })
-        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const { id } = (await res.json()) as { id: string }
 
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buf = ''
-        // 逐块读 → 按行切 NDJSON → 解析事件。
+        // 轮询 Workflow 进度，直到 done/error 或被取消。
         for (;;) {
-          const { value, done } = await reader.read()
-          if (done) break
-          buf += decoder.decode(value, { stream: true })
-          let nl: number
-          while ((nl = buf.indexOf('\n')) >= 0) {
-            const line = buf.slice(0, nl).trim()
-            buf = buf.slice(nl + 1)
-            if (!line) continue
-            const ev = JSON.parse(line) as
-              | { type: 'stage'; stage: string }
-              | { type: 'done'; pages: number; chunks: number }
-              | { type: 'error'; message: string }
-            if (ev.type === 'stage') {
-              const idx = stageIndex(ev.stage)
-              if (idx >= 0) setJob((j) => (j ? { ...j, stage: idx } : j))
-            } else if (ev.type === 'done') {
-              setJob((j) =>
-                j ? { ...j, stage: INGEST_STAGES.length, done: true, pages: ev.pages, chunks: ev.chunks } : j,
-              )
-              onDone?.()
-            } else if (ev.type === 'error') {
-              setJob((j) => (j ? { ...j, error: ev.message } : j))
-            }
+          if (ac.signal.aborted) return
+          await sleep(1500)
+          if (ac.signal.aborted) return
+          const sres = await fetch(`/api/ingest/status?id=${encodeURIComponent(id)}`, {
+            signal: ac.signal,
+          })
+          if (!sres.ok) continue
+          const ev = (await sres.json()) as {
+            stage: string
+            pages?: number
+            chunks?: number
+            message?: string
           }
+          if (ev.stage === 'done') {
+            setJob((j) =>
+              j
+                ? { ...j, stage: INGEST_STAGES.length, done: true, pages: ev.pages ?? 0, chunks: ev.chunks ?? 0 }
+                : j,
+            )
+            onDone?.()
+            return
+          }
+          if (ev.stage === 'error') {
+            setJob((j) => (j ? { ...j, error: ev.message ?? '入库失败' } : j))
+            return
+          }
+          const idx = stageIndex(ev.stage)
+          if (idx >= 0) setJob((j) => (j ? { ...j, stage: idx } : j))
         }
       } catch (e) {
         if ((e as Error).name === 'AbortError') return

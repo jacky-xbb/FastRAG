@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fastrag",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-06-17",
+  "compatibility_flags": ["nodejs_compat"],
+  // @mastra/libsql 硬 import @libsql/client 的 node 版（带原生绑定，Workers 跑不通）。
+  // 别名到 ./web 入口（fetch-based hrana，仅连远程 Turso，正合我们所需）。
+  "alias": {
+    "@libsql/client": "@libsql/client/web"
+  },
+  // 前端静态资源由 Workers 原生托管（SPA 回退 index.html）。
+  "assets": {
+    "directory": "ui/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // /api/* 一律先进 Worker；其余路径由 assets 托管（SPA 未命中文件回退 index.html）。
+    "run_worker_first": ["/api/*"]
+  },
+  // PDF 原件 + OCR 缓存 + 入库进度，都落 R2。
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "fastrag" }],
+  // 入库长任务（OCR 轮询 + embed/upsert）走 Workflow，持久可重试。
+  "workflows": [
+    {
+      "binding": "INGEST_WORKFLOW",
+      "name": "fastrag-ingest",
+      "class_name": "IngestWorkflow"
+    }
+  ],
+  "observability": { "enabled": true }
+}

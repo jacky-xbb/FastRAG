@@ -36,7 +36,6 @@ export function LoginPage() {
           <h1 className="text-3xl font-semibold leading-snug text-zinc-50">防水卷材国标<br />检索工作台</h1>
           <p className="mt-3 max-w-sm text-sm text-zinc-400">混合检索（向量 + BM25 + 元数据过滤），指标行级命中，逐条标注标准号与页码。</p>
         </div>
-        <div className="text-xs text-zinc-600">本地运行 · 数据不出库</div>
       </div>
       <div className="grid place-items-center p-8">
         <form onSubmit={submit} className="w-full max-w-sm space-y-4">
@@ -67,7 +66,6 @@ export function LoginPage() {
           >
             {busy ? '登录中…' : '进入工作台'}
           </button>
-          <p className="text-center text-xs text-zinc-600">凭据在 .env 配置（ADMIN_USER / ADMIN_PASSWORD）</p>
         </form>
       </div>
     </div>

@@ -13,6 +13,10 @@ build/
 *.tsbuildinfo
 .mastra/
 
+# Cloudflare Workers（本地状态 + 生成的运行时类型，CI 用 `wrangler types` 现生成）
+.wrangler/
+worker-configuration.d.ts
+
 # libSQL / SQLite 本地库
 *.db
 *.db-shm

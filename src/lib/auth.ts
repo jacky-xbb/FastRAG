@@ -62,9 +62,9 @@ export function parseCookies(header: string | undefined): Record<string, string>
   return out
 }
 
-/** 从请求里取已验证的用户名（未登录返回 null）。 */
-export function authedUser(req: import('node:http').IncomingMessage): string | null {
-  const token = parseCookies(req.headers.cookie)[COOKIE_NAME]
+/** 从 Cookie 头取已验证的用户名（未登录返回 null）。 */
+export function authedUser(cookieHeader: string | null | undefined): string | null {
+  const token = parseCookies(cookieHeader ?? undefined)[COOKIE_NAME]
   return verifyToken(token)
 }
 

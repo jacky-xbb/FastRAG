@@ -4,7 +4,7 @@
 // 进程内缓存：同一次运行只读一次库。集成/IO，不做 TDD。
 
 import { createClient } from '@libsql/client'
-import { VECTOR_DB_URL, INDEX_NAME } from './openrouter.js'
+import { VECTOR_DB_URL, VECTOR_DB_AUTH_TOKEN, INDEX_NAME } from './openrouter.js'
 import type { ChunkMeta } from './hybrid.js'
 
 export interface CorpusChunk {
@@ -26,7 +26,7 @@ export function loadCorpusFresh(): Promise<CorpusChunk[]> {
 }
 
 async function fetchCorpus(): Promise<CorpusChunk[]> {
-  const client = createClient({ url: VECTOR_DB_URL })
+  const client = createClient({ url: VECTOR_DB_URL, authToken: VECTOR_DB_AUTH_TOKEN })
   const res = await client.execute(`SELECT vector_id, metadata FROM ${INDEX_NAME}`)
   return res.rows.map((r) => {
     const metadata = JSON.parse(r.metadata as string) as ChunkMeta & { text?: string }

@@ -1,8 +1,7 @@
 // 检索台（三栏）：左历史会话、中对话（ai-elements）、右证据面板。
 // 当前会话由 URL 决定：/chat = 新会话；/chat/:threadId = 该会话（深链/刷新保留，ADR-0007）。
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Pencil, Trash2 } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import { Conversation, ConversationContent } from '@/components/ai-elements/conversation'
@@ -17,20 +16,10 @@ import {
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 import { Loader } from '@/components/ai-elements/loader'
 import { Suggestion } from '@/components/ai-elements/suggestion'
-import { useThreads } from '../lib/useThreads'
+import { useThreadsContext } from '../lib/threadsContext'
 import { SUGGESTIONS } from '../lib/mockData'
 
 const newThreadId = () => 'web-' + Math.random().toString(36).slice(2)
-
-function fmtWhen(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const now = new Date()
-  const sameDay = d.toDateString() === now.toDateString()
-  return sameDay
-    ? `今天 ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-    : `${d.getMonth() + 1} 月 ${d.getDate()} 日`
-}
 
 type AnyPart = { type: string; text?: string; toolName?: string; state?: string; input?: unknown; output?: unknown; errorText?: string }
 const textOf = (m: UIMessage) => (m.parts as AnyPart[]).filter((p) => p.type === 'text').map((p) => p.text ?? '').join('')
@@ -78,18 +67,24 @@ export function ChatPage() {
       }),
     }),
   )
-  const { threads, refresh: refreshThreads, rename, remove } = useThreads()
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editValue, setEditValue] = useState('')
+  const { refresh: refreshThreads } = useThreadsContext()
   const { messages, status, sendMessage, setMessages } = useChat({
     transport: transport.current,
     onFinish: () => refreshThreads(),
   })
 
-  // URL 带 :threadId 且尚未拉过 → 加载该会话历史（深链 / 刷新 / 点历史）。
-  // 守卫用 loadedRef（成功后才记），不拿 idRef 自卡：否则 StrictMode 双跑时第一次的 fetch 被清理取消、第二次又被守卫挡掉，历史拉不进来。
+  // 会话切换由 URL 决定：
+  // - 有 :threadId 且尚未拉过 → 加载该会话历史（深链 / 刷新 / 点历史）。
+  //   守卫用 loadedRef（成功后才记），不拿 idRef 自卡：否则 StrictMode 双跑时第一次的 fetch 被清理取消、第二次又被守卫挡掉，历史拉不进来。
+  // - 无 param（新会话，侧栏点「新会话」或删当前会话后）→ 起新 id、清空对话。
   useEffect(() => {
-    if (!param || param === loadedRef.current) return
+    if (!param) {
+      idRef.current = newThreadId()
+      loadedRef.current = null
+      setMessages([])
+      return
+    }
+    if (param === loadedRef.current) return
     idRef.current = param
     let alive = true
     fetch('/api/messages?threadId=' + encodeURIComponent(param))
@@ -105,38 +100,6 @@ export function ChatPage() {
     }
   }, [param, setMessages])
 
-  function newChat() {
-    idRef.current = newThreadId()
-    setMessages([])
-    navigate('/chat')
-  }
-
-  function startEdit(id: string, title: string) {
-    setEditingId(id)
-    setEditValue(title)
-  }
-
-  async function commitEdit(id: string) {
-    const title = editValue.trim()
-    setEditingId(null)
-    if (!title) return
-    try {
-      await rename(id, title)
-    } catch {
-      /* 改名失败：列表保持原样，刷新时回到库内标题 */
-    }
-  }
-
-  async function deleteThread(id: string) {
-    if (!window.confirm('确定删除这个会话？删除后无法恢复。')) return
-    try {
-      await remove(id)
-      if (id === activeId) newChat() // 删的是当前会话 → 回到新会话空白态
-    } catch {
-      /* 删除失败：忽略，列表不变 */
-    }
-  }
-
   function send(text: string) {
     if (!text.trim()) return
     sendMessage({ text })
@@ -148,70 +111,12 @@ export function ChatPage() {
     }
   }
 
-  const activeId = param ?? idRef.current
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
   const lastTools = lastAssistant ? toolPartsOf(lastAssistant) : []
   const sources = parseSources(lastTools)
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* 左：历史会话 */}
-      <aside className="w-56 flex-none overflow-y-auto border-r border-zinc-800 p-3 text-sm">
-        <button onClick={newChat} className="mb-3 w-full rounded-md border border-zinc-700 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">+ 新会话</button>
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">历史</div>
-        {!threads && <div className="px-2 text-xs text-zinc-600">加载中…</div>}
-        {threads && threads.length === 0 && <div className="px-2 text-xs text-zinc-600">暂无历史会话。</div>}
-        {threads?.map((s) => (
-          <div
-            key={s.id}
-            onClick={() => editingId !== s.id && navigate('/chat/' + s.id)}
-            className={`group relative mb-0.5 cursor-pointer rounded px-2 py-1.5 hover:bg-zinc-800 ${s.id === activeId ? 'bg-zinc-800' : ''}`}
-          >
-            {editingId === s.id ? (
-              <input
-                autoFocus
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                onBlur={() => commitEdit(s.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitEdit(s.id)
-                  else if (e.key === 'Escape') setEditingId(null)
-                }}
-                className="w-full rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5 text-zinc-100 outline-none focus:border-emerald-500"
-              />
-            ) : (
-              <span className="block truncate pr-12 text-zinc-300">{s.title}</span>
-            )}
-            <span className="block truncate text-xs text-zinc-600">{fmtWhen(s.updatedAt)}</span>
-            {editingId !== s.id && (
-              <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                <button
-                  aria-label="编辑标题"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    startEdit(s.id, s.title)
-                  }}
-                  className="rounded p-1 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  aria-label="删除会话"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    deleteThread(s.id)
-                  }}
-                  className="rounded p-1 text-zinc-400 hover:bg-zinc-700 hover:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </aside>
-
       {/* 中：对话 */}
       <main className="flex flex-1 flex-col overflow-hidden">
         <Conversation className="flex-1">

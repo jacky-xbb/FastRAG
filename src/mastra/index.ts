@@ -7,25 +7,38 @@ import { createTool } from '@mastra/core/tools'
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql'
 import { Memory } from '@mastra/memory'
 import { z } from 'zod'
-import { chatModel, VECTOR_DB_URL } from '../lib/openrouter.js'
+import { chatModel, VECTOR_DB_URL, VECTOR_DB_AUTH_TOKEN } from '../lib/openrouter.js'
 import { tavilySearch } from '../lib/tavily.js'
 import { hybridSearch } from '../lib/retrieve.js'
 import { formatHits } from '../lib/hybrid.js'
 
-export const libsqlVector = new LibSQLVector({ id: 'libsql', url: VECTOR_DB_URL })
+// Cloudflare Workers 禁止在全局作用域做异步 I/O；而 LibSQLStore/Memory/Mastra 构造会
+// fire-and-forget 触发连库建表（init），在模块顶层 new 就会被 workerd 拒绝并把 I/O 上下文
+// 绑死在全局（之后进 handler 再用也是坏的）。故整张图改为懒构造：首次请求（handler 内）才
+// 实例化，按 isolate 缓存为单例。各导出改成 getXxx() 取值。
+function buildGraph() {
+  const libsqlVector = new LibSQLVector({
+    id: 'libsql',
+    url: VECTOR_DB_URL,
+    authToken: VECTOR_DB_AUTH_TOKEN,
+  })
 
-// 会话历史与向量库共用同一个 libSQL 文件（#5）：两者表名不冲突，可共存。
-export const libsqlStore = new LibSQLStore({ id: 'libsql-store', url: VECTOR_DB_URL })
+  // 会话历史与向量库共用同一个 libSQL（#5）：两者表名不冲突，可共存（线上同一个 Turso 库）。
+  const libsqlStore = new LibSQLStore({
+    id: 'libsql-store',
+    url: VECTOR_DB_URL,
+    authToken: VECTOR_DB_AUTH_TOKEN,
+  })
 
-// 多轮会话历史：默认带最近 10 条消息（semanticRecall 关闭，无需额外向量库）。
-export const memory = new Memory({ storage: libsqlStore })
+  // 多轮会话历史：默认带最近 10 条消息（semanticRecall 关闭，无需额外向量库）。
+  const memory = new Memory({ storage: libsqlStore })
 
-// 混合检索工具（#4，硬约束②③）：向量 + BM25 关键词 + 元数据过滤，非纯向量。
+  // 混合检索工具（#4，硬约束②③）：向量 + BM25 关键词 + 元数据过滤，非纯向量。
 // 元数据过滤在内存里做（中文 key 在 libSQL filter 会报错）。
 // Agent 可填 {标准号,表名,指标名,页码} 收窄；过滤命中为空时 hybridSearch 自动回退
 // 无过滤检索（防把标准号/表名猜错导致空答），靠混合召回保底。
 // 标准号归一化匹配（jc684↔「JC 684-1997」），故模型用紧凑写法也能对上。
-export const hybridQueryTool = createTool({
+  const hybridQueryTool = createTool({
   id: 'hybridQueryTool',
   description:
     '在已入库国标中做混合检索（向量 + BM25 关键词 + 元数据过滤）。回答前先调它，库内优先。返回每个命中块的原文与「标准号+表名+页码」。可选填标准号/表名/指标名/页码收窄检索。',
@@ -48,7 +61,7 @@ export const hybridQueryTool = createTool({
 })
 
 // 联网兜底工具（#6）：库内检索不到时调用——既包括未入库的防水卷材标准，也包括与标准无关的库外问题。结果自带「联网来源」标记。
-export const webSearchTool = createTool({
+  const webSearchTool = createTool({
   id: 'webSearchTool',
   description:
     '联网搜索兜底。当 hybridQueryTool 在库内找不到答案时调用——无论是未入库的防水卷材标准，还是与标准无关的库外问题（如天气、常识）。返回结果均为「联网来源」，不可与本地库来源混淆。',
@@ -60,7 +73,7 @@ export const webSearchTool = createTool({
   },
 })
 
-export const standardsAgent = new Agent({
+  const standardsAgent = new Agent({
   id: 'standardsAgent',
   name: '国标问答',
   instructions: `你是防水卷材国标/行标问答助手；库内查不到时，也能联网回答其他问题。
@@ -79,12 +92,23 @@ export const standardsAgent = new Agent({
   memory,
 })
 
+  const mastra = new Mastra({
+    agents: { standardsAgent },
+    vectors: { libsql: libsqlVector },
+    storage: libsqlStore,
+  })
+
+  return { libsqlVector, libsqlStore, memory, standardsAgent, mastra }
+}
+
+// 模块级单例缓存（按 isolate）。首次 getXxx() 在 handler 内触发构造，避开全局作用域 I/O 禁令。
+let _graph: ReturnType<typeof buildGraph> | undefined
+const graph = () => (_graph ??= buildGraph())
+
+export const getLibsqlVector = () => graph().libsqlVector
+export const getMemory = () => graph().memory
+export const getMastra = () => graph().mastra
+
 // 宽口径问题（如「有哪些性能要求」）会跨多张表多次检索，generate 默认 5 步常被截断成空答案；
 // 放宽到 12 步，给模型留出检索后生成最终回答的余地。各调用点（web/ask）显式带上。
 export const GENERATE_MAX_STEPS = 12
-
-export const mastra = new Mastra({
-  agents: { standardsAgent },
-  vectors: { libsql: libsqlVector },
-  storage: libsqlStore,
-})

@@ -12,20 +12,26 @@
 // 全量重建前建议先删 vector.db（会一并清掉会话历史，见 #5）。
 
 import 'dotenv/config'
-import { readdir, mkdir } from 'node:fs/promises'
+import { readdir, mkdir, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, basename } from 'node:path'
 import { planIngest, summarizePlan } from './lib/ingest-plan.js'
 import { INDEX_NAME } from './lib/openrouter.js'
-import {
-  OCR_CACHE_DIR,
-  ensureIndex,
-  chunkPdf,
-  upsertRecords,
-} from './lib/ingest-pipeline.js'
+import { ensureIndex, cachedOcrPages, chunkPages, upsertRecords } from './lib/ingest-pipeline.js'
+import { fsOcrCache, OCR_CACHE_DIR } from './lib/ocr-cache-fs.js'
+import type { IndicatorChunk } from './lib/indicator-chunk.js'
 
 const DEFAULT_PDF = 'pdf/GBT 18242-2025 弹性体塑性体改性沥青防水卷材.pdf'
 const PDF_DIR = 'pdf'
+const cache = fsOcrCache()
+
+/** 单份 PDF（读盘）→ OCR（fs 缓存）→ 指标行块。 */
+async function chunkPdf(pdfPath: string): Promise<IndicatorChunk[]> {
+  console.log(`[ingest] OCR 读取 ${pdfPath}`)
+  const bytes = new Uint8Array(await readFile(pdfPath))
+  const pages = await cachedOcrPages(bytes, basename(pdfPath), cache)
+  return chunkPages(pages, basename(pdfPath))
+}
 
 async function main() {
   const args = process.argv.slice(2)

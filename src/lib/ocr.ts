@@ -4,10 +4,6 @@
 //   提交 job → 轮询到 done → 拉 jsonl 结果 → 逐页 markdown。
 // 指标表格在 markdown 里以带 rowspan/colspan 的 HTML 表格保留，合并单元格不丢。
 
-import { readFile } from 'node:fs/promises'
-import { basename } from 'node:path'
-import { setDefaultResultOrder } from 'node:dns'
-import { setDefaultAutoSelectFamily } from 'node:net'
 import type { PageText } from './chunk.js'
 
 const JOB_URL = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs'
@@ -39,12 +35,11 @@ export function parsePaddleJsonl(jsonl: string): string[] {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 提交 PDF 给 PaddleOCR-VL，返回 jobId。 */
-async function submitJob(pdfPath: string, apiKey: string): Promise<string> {
-  const buf = await readFile(pdfPath)
+async function submitJob(pdfBytes: Uint8Array, fileName: string, apiKey: string): Promise<string> {
   const form = new FormData()
   form.append('model', MODEL)
   form.append('optionalPayload', JSON.stringify(OPTIONAL_PAYLOAD))
-  form.append('file', new Blob([new Uint8Array(buf)]), basename(pdfPath))
+  form.append('file', new Blob([pdfBytes]), fileName)
 
   const res = await fetch(JOB_URL, {
     method: 'POST',
@@ -90,23 +85,36 @@ async function pollJob(jobId: string, apiKey: string): Promise<string> {
   }
 }
 
+// 结果托管在百度 BCE（bcebos.com）：其 IPv6 地址在 Node 本机不可达，而 Node fetch 默认
+// 优先试 IPv6 且不回退，直接 ETIMEDOUT。强制走 IPv4 才能拉到结果。
+// Workers 运行时无 node:dns/node:net 这两个 API（且 fetch 由 CF 边缘代连），故 guarded：
+// Node 下生效；Workers 下 import 失败/函数缺失即静默跳过（边缘连通性见迁移文档风险①）。
+async function preferIPv4(): Promise<void> {
+  try {
+    const dns = await import('node:dns')
+    const net = await import('node:net')
+    dns.setDefaultResultOrder?.('ipv4first')
+    net.setDefaultAutoSelectFamily?.(false)
+  } catch {
+    /* Workers：no-op */
+  }
+}
+
 /**
- * 把扫描件 PDF 经 PaddleOCR-VL 转成逐页 markdown，对齐入库格式（PageText[]）。
+ * 把扫描件 PDF（字节）经 PaddleOCR-VL 转成逐页 markdown，对齐入库格式（PageText[]）。
+ * 吃字节而非路径，本地（fs 读盘）与 Workers（R2 取对象）两条路都能复用。
  * 网络调用，不做 TDD；集成时手测。
  */
-export async function ocrPdfToPages(pdfPath: string): Promise<PageText[]> {
+export async function ocrPdfToPages(pdfBytes: Uint8Array, fileName: string): Promise<PageText[]> {
   const apiKey = process.env.PADDLE_API_KEY
   if (!apiKey) {
     throw new Error('缺少 PADDLE_API_KEY（见 .env.example）')
   }
 
-  // 结果托管在百度 BCE（bcebos.com）：其 IPv6 地址此处不可达，而 Node fetch 默认
-  // 优先试 IPv6 且不回退，直接 ETIMEDOUT。强制走 IPv4 才能拉到结果。
-  setDefaultResultOrder('ipv4first')
-  setDefaultAutoSelectFamily(false)
+  await preferIPv4()
 
-  console.log(`[ocr] 提交 ${pdfPath} 给 PaddleOCR-VL...`)
-  const jobId = await submitJob(pdfPath, apiKey)
+  console.log(`[ocr] 提交 ${fileName} 给 PaddleOCR-VL...`)
+  const jobId = await submitJob(pdfBytes, fileName, apiKey)
   console.log(`[ocr] jobId=${jobId}，轮询中...`)
   const jsonUrl = await pollJob(jobId, apiKey)
   console.log(`[ocr] 拉取结果：${jsonUrl}`)

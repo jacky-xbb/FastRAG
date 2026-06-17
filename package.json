@@ -6,10 +6,16 @@
   "type": "module",
   "scripts": {
     "ingest": "tsx src/ingest.ts",
-    "web": "tsx src/web.ts",
+    "ingest:local": "DB_MODE=local tsx src/ingest.ts",
+    "dev:api": "wrangler dev",
+    "dev:api:local": "wrangler dev --var DB_MODE:local",
+    "dev:db": "turso dev --db-file vector.db",
     "ui": "vite --config ui/vite.config.ts",
     "ui:build": "vite build --config ui/vite.config.ts",
-    "dev": "concurrently -k -n api,ui -c blue,magenta \"npm:web\" \"npm:ui\"",
+    "dev": "concurrently -k -n api,ui -c blue,magenta \"npm:dev:api\" \"npm:ui\"",
+    "dev:local": "concurrently -k -n db,api,ui -c green,blue,magenta \"npm:dev:db\" \"npm:dev:api:local\" \"npm:ui\"",
+    "deploy": "npm run ui:build && wrangler deploy",
+    "cf-typegen": "wrangler types",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -60,6 +66,7 @@
     "typescript": "^5.7.0",
     "use-stick-to-bottom": "^1.1.6",
     "vite": "^6.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "wrangler": "^4.101.0"
   }
 }
