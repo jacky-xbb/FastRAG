@@ -23,6 +23,10 @@
 - `docs/adr/`：架构决策记录。改了选型先看/补 ADR。
 - `docs/调研文档.md`：一次性调研，别往里塞会绑定实现的硬决策（放这儿没人会读到）。
 
+## 前端约定（软）
+
+前端新增 UI 先看 [AI Elements](https://elements.ai-sdk.dev/) 有没有现成组件，有就 `npx ai-elements add <名>` 装进来复用，没有再自建。组件落在 `ui/src/components/ai-elements/`。
+
 ## Agent skills
 
 ### Issue tracker

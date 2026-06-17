@@ -306,7 +306,8 @@ const server = createServer(async (req, res) => {
           if (!text) return null // 空会话（无用户消息）不进列表
           return {
             id: t.id,
-            title: deriveThreadTitle(text),
+            // 用户改过名（库里存了 title）优先用存储标题；否则从首条提问派生。
+            title: t.title && t.title.trim() ? t.title.trim() : deriveThreadTitle(text),
             createdAt: t.createdAt,
             updatedAt: t.updatedAt,
           }
@@ -320,6 +321,38 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
     }
     return
+  }
+
+  // 改会话标题：PATCH /api/threads/:id，body {title}。落到 thread.title，列表接口优先返回它。
+  // 取现有 metadata 一起回传，避免 updateThread 误清。
+  if (req.method === 'PATCH' && path.startsWith('/api/threads/')) {
+    try {
+      const id = decodeURIComponent(path.slice('/api/threads/'.length))
+      if (!id) throw new Error('缺少 threadId')
+      const { title } = JSON.parse(await readBody(req))
+      const clean = deriveThreadTitle(String(title ?? ''))
+      if (!clean || clean === '新会话') return json(400, { error: '标题不能为空' })
+      const thread = await memory.getThreadById({ threadId: id })
+      if (!thread) return json(404, { error: '会话不存在' })
+      await memory.updateThread({ id, title: clean, metadata: thread.metadata ?? {} })
+      return json(200, { id, title: clean })
+    } catch (err) {
+      console.error('[threads:patch] 出错:', err)
+      return json(500, { error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  // 删会话：DELETE /api/threads/:id。
+  if (req.method === 'DELETE' && path.startsWith('/api/threads/')) {
+    try {
+      const id = decodeURIComponent(path.slice('/api/threads/'.length))
+      if (!id) throw new Error('缺少 threadId')
+      await memory.deleteThread(id)
+      return json(200, { id })
+    } catch (err) {
+      console.error('[threads:delete] 出错:', err)
+      return json(500, { error: err instanceof Error ? err.message : String(err) })
+    }
   }
 
   // 某会话的历史消息（#12）：AI SDK v6 UIMessage 形状，前端用来 seed useChat。

@@ -24,9 +24,33 @@ export function useThreads() {
     }
   }, [])
 
+  // 改标题：PATCH /api/threads/:id，成功后刷新列表。
+  const rename = useCallback(
+    async (id: string, title: string) => {
+      const res = await fetch('/api/threads/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await refresh()
+    },
+    [refresh],
+  )
+
+  // 删会话：DELETE /api/threads/:id，成功后刷新列表。
+  const remove = useCallback(
+    async (id: string) => {
+      const res = await fetch('/api/threads/' + encodeURIComponent(id), { method: 'DELETE' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await refresh()
+    },
+    [refresh],
+  )
+
   useEffect(() => {
     refresh()
   }, [refresh])
 
-  return { threads, error, refresh }
+  return { threads, error, refresh, rename, remove }
 }

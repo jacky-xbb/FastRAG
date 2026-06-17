@@ -1,7 +1,8 @@
 // 检索台（三栏）：左历史会话、中对话（ai-elements）、右证据面板。
 // 当前会话由 URL 决定：/chat = 新会话；/chat/:threadId = 该会话（深链/刷新保留，ADR-0007）。
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import { Conversation, ConversationContent } from '@/components/ai-elements/conversation'
@@ -77,7 +78,9 @@ export function ChatPage() {
       }),
     }),
   )
-  const { threads, refresh: refreshThreads } = useThreads()
+  const { threads, refresh: refreshThreads, rename, remove } = useThreads()
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
   const { messages, status, sendMessage, setMessages } = useChat({
     transport: transport.current,
     onFinish: () => refreshThreads(),
@@ -108,6 +111,32 @@ export function ChatPage() {
     navigate('/chat')
   }
 
+  function startEdit(id: string, title: string) {
+    setEditingId(id)
+    setEditValue(title)
+  }
+
+  async function commitEdit(id: string) {
+    const title = editValue.trim()
+    setEditingId(null)
+    if (!title) return
+    try {
+      await rename(id, title)
+    } catch {
+      /* 改名失败：列表保持原样，刷新时回到库内标题 */
+    }
+  }
+
+  async function deleteThread(id: string) {
+    if (!window.confirm('确定删除这个会话？删除后无法恢复。')) return
+    try {
+      await remove(id)
+      if (id === activeId) newChat() // 删的是当前会话 → 回到新会话空白态
+    } catch {
+      /* 删除失败：忽略，列表不变 */
+    }
+  }
+
   function send(text: string) {
     if (!text.trim()) return
     sendMessage({ text })
@@ -133,14 +162,53 @@ export function ChatPage() {
         {!threads && <div className="px-2 text-xs text-zinc-600">加载中…</div>}
         {threads && threads.length === 0 && <div className="px-2 text-xs text-zinc-600">暂无历史会话。</div>}
         {threads?.map((s) => (
-          <button
+          <div
             key={s.id}
-            onClick={() => navigate('/chat/' + s.id)}
-            className={`mb-0.5 block w-full truncate rounded px-2 py-1.5 text-left hover:bg-zinc-800 ${s.id === activeId ? 'bg-zinc-800' : ''}`}
+            onClick={() => editingId !== s.id && navigate('/chat/' + s.id)}
+            className={`group relative mb-0.5 cursor-pointer rounded px-2 py-1.5 hover:bg-zinc-800 ${s.id === activeId ? 'bg-zinc-800' : ''}`}
           >
-            <span className="text-zinc-300">{s.title}</span>
+            {editingId === s.id ? (
+              <input
+                autoFocus
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => commitEdit(s.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitEdit(s.id)
+                  else if (e.key === 'Escape') setEditingId(null)
+                }}
+                className="w-full rounded border border-zinc-600 bg-zinc-900 px-1 py-0.5 text-zinc-100 outline-none focus:border-emerald-500"
+              />
+            ) : (
+              <span className="block truncate pr-12 text-zinc-300">{s.title}</span>
+            )}
             <span className="block truncate text-xs text-zinc-600">{fmtWhen(s.updatedAt)}</span>
-          </button>
+            {editingId !== s.id && (
+              <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  aria-label="编辑标题"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    startEdit(s.id, s.title)
+                  }}
+                  className="rounded p-1 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  aria-label="删除会话"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteThread(s.id)
+                  }}
+                  className="rounded p-1 text-zinc-400 hover:bg-zinc-700 hover:text-red-400"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
         ))}
       </aside>
 
