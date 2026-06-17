@@ -164,8 +164,8 @@ export function ChatPage() {
         </div>
       </main>
 
-      {/* 右：证据面板 */}
-      <aside className="w-80 flex-none overflow-y-auto border-l border-zinc-800 bg-zinc-900/40 p-4 text-sm">
+      {/* 右：证据面板。小屏隐藏（会挤瘪聊天区），≥lg 才显示；来源信息答案正文里也有。 */}
+      <aside className="hidden w-80 flex-none overflow-y-auto border-l border-zinc-800 bg-zinc-900/40 p-4 text-sm lg:block">
         <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">检索轨迹</div>
         {lastTools.length > 0 ? (
           <div className="mt-2 space-y-2">
