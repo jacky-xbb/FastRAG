@@ -4,8 +4,8 @@
 // 元数据过滤对两路都生效，让指标问答能按 {标准号,表名,指标名,页码} 收窄。
 
 import { embed } from 'ai'
-import { embedModel, INDEX_NAME } from './openrouter.js'
-import { loadCorpus, type CorpusChunk } from './corpus.js'
+import { embedModel } from './openrouter.js'
+import { loadCorpus, vectorSearchIds, type CorpusChunk } from './corpus.js'
 import { buildBm25, bm25Search } from './bm25.js'
 import {
   rrfFuse,
@@ -25,12 +25,7 @@ export interface HybridHit {
   metadata: ChunkMeta
 }
 
-interface VectorStore {
-  query(args: { indexName: string; queryVector: number[]; topK: number }): Promise<{ id: string }[]>
-}
-
 export async function hybridSearch(
-  vectorStore: VectorStore,
   opts: { query: string; filter?: ChunkFilter; topK?: number },
 ): Promise<HybridHit[]> {
   const { query, topK = 6 } = opts
@@ -48,15 +43,16 @@ export async function hybridSearch(
   const searchText = expandSynonyms(query)
 
   // 向量召回与过滤无关：query 不变，embedding/向量查询只做一次，过滤回退时复用。
+  // 暴力扫 vector_distance_cos（去 DiskANN 索引，规模小、结果一致，见调研）。
   const { embedding } = await embed({ model: embedModel, value: searchText })
-  const vec = await vectorStore.query({ indexName: INDEX_NAME, queryVector: embedding, topK: VEC_RECALL })
+  const vecIdsAll = await vectorSearchIds(embedding, VEC_RECALL)
 
   // 过滤先行：BM25 在过滤后的语料上 build（语料小，每次 build 开销可忽略），
   // 向量路用同一份 byId 过滤，两路口径一致。
   const run = (f: ChunkFilter): HybridHit[] => {
     const filtered: CorpusChunk[] = corpus.filter((c) => matchesFilter(c.metadata, f))
     const byId = new Map(filtered.map((c) => [c.id, c]))
-    const vecIds = vec.map((r) => r.id).filter((id) => byId.has(id))
+    const vecIds = vecIdsAll.filter((id) => byId.has(id))
     const bm25 = buildBm25(filtered.map((c) => ({ id: c.id, text: c.text })))
     const kwIds = bm25Search(bm25, searchText, BM25_RECALL).map((r) => r.id)
     return rrfFuse([vecIds, kwIds])

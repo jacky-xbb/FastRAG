@@ -33,3 +33,18 @@ async function fetchCorpus(): Promise<CorpusChunk[]> {
     return { id: r.vector_id as string, text: metadata.text ?? '', metadata }
   })
 }
+
+/**
+ * 向量召回：`vector_distance_cos` 全表线性扫，返回按相似度升序的 top-K vector_id。
+ * 本库规模（~1700 向量）下，去 DiskANN 索引改暴力扫——实测 ~10ms、结果与 vector_top_k 逐条一致，
+ * 且免索引存储膨胀 / 远程逐条建图的写入慢（见调研）。规模涨到 ~10万+ 再加回 ANN 索引。
+ */
+export async function vectorSearchIds(queryVector: number[], topK: number): Promise<string[]> {
+  const client = createClient({ url: VECTOR_DB_URL, authToken: VECTOR_DB_AUTH_TOKEN })
+  const res = await client.execute({
+    sql: `SELECT vector_id FROM ${INDEX_NAME}
+          ORDER BY vector_distance_cos(embedding, vector32(?)) LIMIT ?`,
+    args: [JSON.stringify(queryVector), topK],
+  })
+  return res.rows.map((r) => r.vector_id as string)
+}

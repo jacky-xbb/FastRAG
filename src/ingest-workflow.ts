@@ -2,7 +2,7 @@
 // 跨 step 自动续跑，不受单次 Worker 请求时长限制。复用 ingest-pipeline 的同一套管线（Workers-bundle 安全）。
 // 进度逐 step 写到 R2（ingest_status/<id>.json），前端轮询 /api/ingest/status 读它。
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers'
-import { cachedOcrPages, chunkPages, ensureIndex, upsertRecords, type OcrCache } from './lib/ingest-pipeline.js'
+import { cachedOcrPages, chunkPages, ensureTable, upsertRecords, type OcrCache } from './lib/ingest-pipeline.js'
 import type { PageText } from './lib/chunk.js'
 
 export interface IngestParams {
@@ -52,7 +52,7 @@ export class IngestWorkflow extends WorkflowEntrypoint<Env, IngestParams> {
       // 建索引 + 分批 embed/upsert（id 幂等覆盖，重跑不重复入库）。
       await step.do('embed-upsert', STEP_UPSERT, async () => {
         await writeStatus({ stage: 'embed' })
-        await ensureIndex()
+        await ensureTable()
         await upsertRecords(records)
       })
 

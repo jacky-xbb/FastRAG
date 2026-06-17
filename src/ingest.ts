@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { planIngest, summarizePlan } from './lib/ingest-plan.js'
 import { INDEX_NAME } from './lib/openrouter.js'
-import { ensureIndex, cachedOcrPages, chunkPages, upsertRecords } from './lib/ingest-pipeline.js'
+import { ensureTable, cachedOcrPages, chunkPages, upsertRecords } from './lib/ingest-pipeline.js'
 import { fsOcrCache, OCR_CACHE_DIR } from './lib/ocr-cache-fs.js'
 import type { IndicatorChunk } from './lib/indicator-chunk.js'
 
@@ -35,7 +35,7 @@ async function chunkPdf(pdfPath: string): Promise<IndicatorChunk[]> {
 
 async function main() {
   const args = process.argv.slice(2)
-  await ensureIndex()
+  await ensureTable()
 
   if (args.includes('--all')) {
     const files = (await readdir(PDF_DIR)).filter((f) => /\.pdf$/i.test(f)).sort()

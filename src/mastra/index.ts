@@ -51,7 +51,7 @@ function buildGraph() {
     page: z.number().optional().describe('按页码收窄'),
   }),
   execute: async ({ query, topK, standardCode, table, indicator, page }) => {
-    const hits = await hybridSearch(libsqlVector, {
+    const hits = await hybridSearch({
       query,
       topK,
       filter: { 标准号: standardCode, 表名: table, 指标名: indicator, 页码: page },

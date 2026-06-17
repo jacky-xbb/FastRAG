@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { hybridSearch, type HybridHit } from '../src/lib/retrieve.js'
 import { matchesFilter, norm, type ChunkFilter } from '../src/lib/hybrid.js'
-import { getLibsqlVector, getMastra, GENERATE_MAX_STEPS } from '../src/mastra/index.js'
+import { getMastra, GENERATE_MAX_STEPS } from '../src/mastra/index.js'
 
 // 正文题的 groundTruth 多一个 keywords：答案在正文（无指标名可匹配），
 // 改判「召回块文本是否含全部关键词」（见 --prose）。
@@ -87,7 +87,7 @@ async function main() {
 
   for (const [i, c] of cases.entries()) {
     // P0：纯检索召回。--filtered 时用 groundTruth 标准号当过滤（模拟 Agent 提取的 standardCode）。
-    const hits = await hybridSearch(getLibsqlVector(), {
+    const hits = await hybridSearch({
       query: c.input.query,
       topK: K,
       filter: filtered ? { 标准号: c.groundTruth.标准号 } : undefined,

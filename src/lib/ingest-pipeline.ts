@@ -3,10 +3,11 @@
 // id 用 `${文件名}#${序号}` 稳定标识：同份标准重跑按 id 覆盖、不重复入库（幂等）。
 
 import { embedMany } from 'ai'
+import { createClient } from '@libsql/client'
 import { ocrPdfToPages } from './ocr.js'
 import { chunkOcrPages, type IndicatorChunk, type ProseMode } from './indicator-chunk.js'
 import type { PageText } from './chunk.js'
-import { embedModel, EMBED_DIMENSION, INDEX_NAME } from './openrouter.js'
+import { embedModel, EMBED_DIMENSION, INDEX_NAME, VECTOR_DB_URL, VECTOR_DB_AUTH_TOKEN } from './openrouter.js'
 import { getLibsqlVector } from '../mastra/index.js'
 
 const EMBED_BATCH = 256
@@ -18,9 +19,19 @@ export interface OcrCache {
   put(fileName: string, pages: PageText[]): Promise<void>
 }
 
-/** 确保向量索引存在（维度与 embedding 模型一致）。入库前调用一次。 */
-export async function ensureIndex() {
-  await getLibsqlVector().createIndex({ indexName: INDEX_NAME, dimension: EMBED_DIMENSION })
+/** 确保存储表存在。入库前调用一次。
+ *  去 DiskANN 向量索引：本库规模小，检索走 vector_distance_cos 暴力扫（见调研 corpus.vectorSearchIds）。
+ *  表结构与 Mastra LibSQLVector 一致（vector_id 唯一，供 upsert 的 ON CONFLICT 幂等覆盖）。 */
+export async function ensureTable() {
+  const client = createClient({ url: VECTOR_DB_URL, authToken: VECTOR_DB_AUTH_TOKEN })
+  await client.execute(
+    `CREATE TABLE IF NOT EXISTS ${INDEX_NAME} (
+      id SERIAL PRIMARY KEY,
+      vector_id TEXT UNIQUE NOT NULL,
+      embedding F32_BLOB(${EMBED_DIMENSION}),
+      metadata TEXT DEFAULT '{}'
+    )`,
+  )
 }
 
 /** 取一份 PDF 的逐页 OCR 结果，命中缓存则免费、免重跑。 */
