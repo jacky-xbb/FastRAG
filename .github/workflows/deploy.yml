@@ -1,11 +1,9 @@
-# push 到 main：先检查（typecheck + 单测）→ 构建前端 → 部署到 Cloudflare Workers。
+# 已停用 push 自动部署（改走 fly.io 双轨，见 docs/部署-fly.md）。仅保留手动触发，想恢复把 push 触发器加回即可。
 # 检查不绿则不部署。需在仓库 Secrets 配 CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID。
 # Worker 运行时 secrets（OPENROUTER/PADDLE/TAVILY/TURSO_*/ADMIN_*/SESSION_SECRET）在 CF 侧配一次，CI 不推。
 name: Deploy to Cloudflare
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
