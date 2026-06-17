@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
+import { Logo } from '../components/Logo'
 
 export function LoginPage() {
   const { user, loading, login } = useAuth()
@@ -28,8 +29,8 @@ export function LoginPage() {
     <div className="grid min-h-screen grid-cols-1 bg-zinc-950 text-zinc-200 md:grid-cols-2">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-emerald-900/40 to-zinc-900 p-10 md:flex">
         <div className="flex items-center gap-2 font-semibold">
-          <span className="grid h-7 w-7 place-items-center rounded bg-emerald-500 text-zinc-950">标</span>
-          fastrag
+          <Logo className="text-emerald-400" size={26} />
+          <span className="font-mono tracking-tight">fastrag</span>
         </div>
         <div>
           <h1 className="text-3xl font-semibold leading-snug text-zinc-50">防水卷材国标<br />检索工作台</h1>
