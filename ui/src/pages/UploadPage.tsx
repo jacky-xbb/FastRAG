@@ -1,4 +1,5 @@
 // 入库页：上传向量化（/api/ingest，#10）。已入库列表已挪到侧栏（入库模式），这里只留上传。
+import { useState } from 'react'
 import { useIngest } from '../lib/useIngest'
 import { useLibraryContext } from '../lib/libraryContext'
 import { INGEST_STAGES } from '../lib/mockData'
@@ -6,16 +7,30 @@ import { INGEST_STAGES } from '../lib/mockData'
 export function UploadPage() {
   const { refresh } = useLibraryContext()
   const { job, start, clear } = useIngest(refresh) // 入库完成后刷新侧栏资料库列表
+  const [dragging, setDragging] = useState(false)
+
+  // 点击选择与拖入共用：只收 PDF。
+  const accept = (f?: File | null) => {
+    if (!f) return
+    if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) start(f)
+  }
 
   return (
     <div className="flex flex-1 overflow-hidden">
       <section className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-6">
         <h2 className="text-lg font-semibold text-zinc-100">入库新标准</h2>
-        <label className="mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/60 py-10 text-center hover:border-emerald-500/60">
+        <label
+          onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true) }}
+          onDragLeave={(e) => { e.preventDefault(); setDragging(false) }}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); accept(e.dataTransfer.files?.[0]) }}
+          className={`mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-10 text-center transition-colors ${
+            dragging ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 bg-zinc-900/60 hover:border-emerald-500/60'
+          }`}
+        >
           <span className="text-2xl">⬆</span>
-          <span className="text-sm text-zinc-300">拖拽 PDF 或点击选择</span>
+          <span className="text-sm text-zinc-300">{dragging ? '松手即可入库' : '拖拽 PDF 到此处，或点击选择'}</span>
           <span className="font-mono text-xs text-zinc-600">pdf/*.pdf → OCR → chunk → embed → upsert</span>
-          <input type="file" accept="application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) start(f); e.target.value = '' }} />
+          <input type="file" accept="application/pdf" className="hidden" onChange={(e) => { accept(e.target.files?.[0]); e.target.value = '' }} />
         </label>
 
         {job && (
@@ -24,6 +39,11 @@ export function UploadPage() {
               <span className="truncate">$ ingest "{job.fileName}"</span>
               <button onClick={clear} className="text-xs text-zinc-500 hover:text-zinc-300">clear</button>
             </div>
+            {!job.done && !job.error && (
+              <div className="border-b border-zinc-800 px-4 py-1.5 text-[11px] text-zinc-500">
+                入库在后台继续，可离开本页或刷新，回来会自动接上进度。
+              </div>
+            )}
             <div className="space-y-1 p-4">
               {INGEST_STAGES.map((s, i) => {
                 const state = job.stage > i || job.done ? 'done' : job.stage === i ? 'active' : 'todo'
