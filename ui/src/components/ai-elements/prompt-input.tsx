@@ -39,7 +39,6 @@ import type { ChatStatus, FileUIPart } from "ai";
 import {
   CornerDownLeftIcon,
   ImageIcon,
-  Loader2Icon,
   MicIcon,
   PaperclipIcon,
   PlusIcon,
@@ -1032,9 +1031,8 @@ export const PromptInputSubmit = ({
 }: PromptInputSubmitProps) => {
   let Icon = <CornerDownLeftIcon className="size-4" />;
 
-  if (status === "submitted") {
-    Icon = <Loader2Icon className="size-4 animate-spin" />;
-  } else if (status === "streaming") {
+  if (status === "submitted" || status === "streaming") {
+    // 检索中(submitted)与吐字中(streaming)按钮均可点停止，统一显示停止方块。
     Icon = <SquareIcon className="size-4" />;
   } else if (status === "error") {
     Icon = <XIcon className="size-4" />;
