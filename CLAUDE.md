@@ -1,6 +1,6 @@
 # CLAUDE.md — 防水卷材国标问答知识库
 
-问答知识库：导入防水卷材类国标/行标 PDF，检索并对话作答，保留会话历史，必要时联网兜底。技术栈 Mastra(TS) + libSQL。部署在 **Cloudflare Workers**（前端 assets + API fetch handler + 入库 Workflow），libSQL 用 **Turso** 托管；本地开发 `wrangler dev` + vite，本地 CLI 入库（`npm run ingest`）作兜底。部署/迁移见 [ADR-0008](docs/adr/0008-deploy-cloudflare-turso.md) 与 [docs/部署-cloudflare.md](docs/部署-cloudflare.md)。术语见 [CONTEXT.md](CONTEXT.md)，调研全貌见 [docs/调研文档.md](docs/调研文档.md)。
+问答知识库：导入防水卷材类国标/行标 PDF，检索并对话作答，保留会话历史，必要时联网兜底。技术栈 Mastra(TS) + libSQL。部署在 **Cloudflare Workers**（前端 assets + API fetch handler + 入库 Workflow），libSQL 用 **Turso** 托管；本地开发 `wrangler dev` + vite，本地 CLI 入库（`npm run ingest`）作兜底。部署/迁移见 [ADR-0008](docs/adr/0008-deploy-cloudflare-turso.md) 与 [docs/部署-cloudflare.md](docs/部署-cloudflare.md)。**另有 fly.io 部署路径**（常驻 Node 进程 `src/server.ts` + 本地卷 libSQL，与 Cloudflare 双轨并存；路由共享 `src/app.ts`）见 [ADR-0010](docs/adr/0010-deploy-fly-local-volume.md) 与 [docs/部署-fly.md](docs/部署-fly.md)。术语见 [CONTEXT.md](CONTEXT.md)，调研全貌见 [docs/调研文档.md](docs/调研文档.md)。
 
 ## 硬约束（写代码必须遵守）
 

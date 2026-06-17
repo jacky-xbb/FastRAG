@@ -1,0 +1,28 @@
+# fly.io 部署配置。app 名与 region 按需改（sin=新加坡，离国内较近）。
+# 数据全落挂在 /data 的卷（vector.db / pdf / ocr_cache / ingest_status）。
+# 单实例常驻：auto_stop=false + min_machines_running=1，避免缩容杀掉在途入库长任务。
+app = "fastrag"
+primary_region = "sin"
+
+[build]
+
+[env]
+  DATA_DIR = "/data"
+  VECTOR_DB_URL = "file:/data/vector.db"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[mounts]
+  source = "fastrag_data"
+  destination = "/data"
+
+# 让 ~19M 库常驻 page cache；入库时 OCR/embed 也够用。
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1024mb"

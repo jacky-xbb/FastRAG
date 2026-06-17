@@ -8,16 +8,17 @@ import type { OcrCache } from './ingest-pipeline.js'
 
 export const OCR_CACHE_DIR = 'ocr_cache'
 
-export function fsOcrCache(): OcrCache {
+/** baseDir 默认 OCR_CACHE_DIR（CLI 在 cwd 下）；Node/fly.io 入口传 ${DATA_DIR}/ocr_cache 落卷。 */
+export function fsOcrCache(baseDir: string = OCR_CACHE_DIR): OcrCache {
   return {
     async get(fileName) {
-      const p = join(OCR_CACHE_DIR, `${fileName}.json`)
+      const p = join(baseDir, `${fileName}.json`)
       if (!existsSync(p)) return null
       return JSON.parse(await readFile(p, 'utf8')) as PageText[]
     },
     async put(fileName, pages) {
-      await mkdir(OCR_CACHE_DIR, { recursive: true })
-      await writeFile(join(OCR_CACHE_DIR, `${fileName}.json`), JSON.stringify(pages))
+      await mkdir(baseDir, { recursive: true })
+      await writeFile(join(baseDir, `${fileName}.json`), JSON.stringify(pages))
     },
   }
 }
