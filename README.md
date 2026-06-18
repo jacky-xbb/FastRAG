@@ -105,7 +105,7 @@ pnpm dev               # API + vite 热更新 → http://localhost:5173
 
 - **P0 召回率 Recall@K**（纯检索、不经 LLM）：默认裸召回量底线；`--filtered` 用标准号过滤量产线上界。
 - **P2 来源正确**：`--llm` 端到端跑 Agent，校验答案引用的标准号对不对。
-- 数据集在 `test/datasets/`：指标集（`eval-dataset`）+ 正文集（`--prose`）；`--newdocs` 切到「新增文档」评测集，专门验证新入库标准的召回。
+- 数据集在 `test/datasets/`：指标集（`eval-dataset`）+ 正文集（`--prose`）；`--newdocs` 切到「新增文档」评测集，专门验证近期新入库标准（GB 23441-2009、GB 45320-2025、DB11/T 380-2006）的召回。
 
 ```bash
 npx tsx test/eval.ts            # 裸召回 P0（快、便宜）
