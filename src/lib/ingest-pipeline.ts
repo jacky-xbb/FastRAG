@@ -68,9 +68,12 @@ export async function chunkPages(pages: PageText[], fileName: string): Promise<I
 }
 
 /** 删掉某份 PDF 的全部旧块（vector_id 前缀 `${fileName}#`）。
- *  用前缀精确比对而非 LIKE，免去文件名里 _/% 被当通配符的坑。 */
-async function deleteFileChunks(fileName: string) {
-  const client = createClient({ url: VECTOR_DB_URL, authToken: VECTOR_DB_AUTH_TOKEN })
+ *  用前缀精确比对而非 LIKE，免去文件名里 _/% 被当通配符的坑。
+ *  client 可注入（测试用内存库）；不传则按生产配置建连。 */
+export async function deleteFileChunks(
+  fileName: string,
+  client = createClient({ url: VECTOR_DB_URL, authToken: VECTOR_DB_AUTH_TOKEN }),
+) {
   const prefix = `${fileName}#`
   await client.execute({
     sql: `DELETE FROM ${INDEX_NAME} WHERE substr(vector_id, 1, ?) = ?`,
