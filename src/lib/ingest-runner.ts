@@ -1,6 +1,6 @@
-// 进程内入库任务（Node/fly.io 入口用），替代 Cloudflare Workflow：fly.io 是常驻进程，
+// 进程内入库任务（Node/fly.io 入口用）：fly.io 是常驻进程，
 // 入库长任务直接在进程里串行跑即可——不引消息队列。复用 ingest-pipeline 同一套管线，
-// 进度经 BUCKET shim 写 ingest_status/<id>.json（与 ingest-workflow 同形），故 handleIngestStatus 零改动。
+// 进度经 BUCKET shim 写 ingest_status/<id>.json，故 handleIngestStatus 零改动。
 // 串行：避免两个 OCR+embed 同时压垮小机器。重启会丢在途任务（状态停在 embed）——server 启动时标记 error。
 import { join } from 'node:path'
 import { cachedOcrPages, chunkPages, ensureTable, upsertRecords } from './ingest-pipeline.js'

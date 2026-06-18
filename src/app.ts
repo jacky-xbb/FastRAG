@@ -1,6 +1,6 @@
-// 共享路由：HTTP 处理逻辑收口在这里，Cloudflare（src/worker.ts）与 Node（src/server.ts）两个入口都复用。
-// 不 import 任何 cloudflare:workers——对外部能力（对象存储 / 入库任务 / 静态资源）只依赖下方
-// AppEnv 最小结构接口；Cloudflare 真实 Env（R2Bucket/Workflow/Fetcher）与 Node 版 env 都结构满足它。
+// 共享路由：HTTP 处理逻辑收口在这里，由 Node 入口（src/server.ts）注入外部能力后复用。
+// 对外部能力（对象存储 / 入库任务 / 静态资源）只依赖下方 AppEnv 最小结构接口，
+// 入口用本地实现（fs-bucket / ingest-runner / serveStatic）结构满足它。
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
 import { MessageList } from '@mastra/core/agent/message-list'
 import { getMastra, getMemory, GENERATE_MAX_STEPS } from './mastra/index.js'
@@ -17,7 +17,7 @@ import {
   clearedCookie,
 } from './lib/auth.js'
 
-/** 入口注入的外部能力（结构最小化，避免依赖 wrangler 生成的 Env 全类型）。 */
+/** 入口注入的外部能力（结构最小化，入口用本地实现满足）。 */
 export interface AppEnv {
   BUCKET: {
     put(key: string, value: Uint8Array | string): Promise<unknown>

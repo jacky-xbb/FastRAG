@@ -1,7 +1,7 @@
 # 部署到 fly.io（常驻 Node 进程 + 本地卷 libSQL）运维手册
 
 选型与取舍见 [ADR-0010](adr/0010-deploy-fly-local-volume.md)。本文是一次性落地的操作步骤。
-与 Cloudflare 部署（[docs/部署-cloudflare.md](部署-cloudflare.md)）**并存**，互不影响。
+fly.io 为本项目**唯一部署方案**（早期 Cloudflare 路径已弃用，见 [docs/部署-cloudflare.md](部署-cloudflare.md)，仅作历史参考）。
 
 ## 前置
 

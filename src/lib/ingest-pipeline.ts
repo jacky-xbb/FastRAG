@@ -12,7 +12,7 @@ import { getLibsqlVector } from '../mastra/index.js'
 
 const EMBED_BATCH = 256
 
-/** OCR 结果缓存：本地用 fs（ocr-cache-fs.ts），Workers 用 R2（ingest-workflow.ts）。
+/** OCR 结果缓存：用 fs（ocr-cache-fs.ts）落 ${DATA_DIR}/ocr_cache。
  *  OCR ~30s/份且结果 URL 仅 7 天，缓存后重跑免费。key 用文件名（不含目录）。 */
 export interface OcrCache {
   get(fileName: string): Promise<PageText[] | null>

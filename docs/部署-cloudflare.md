@@ -1,5 +1,7 @@
 # 部署到 Cloudflare（Workers + Turso）运维手册
 
+> ⚠️ **已废弃**：Cloudflare 部署 2026-06-18 退役，现用 fly.io（见 [docs/部署-fly.md](部署-fly.md) 与 [ADR-0010](adr/0010-deploy-fly-local-volume.md)）。本文仅作历史参考。
+
 选型与取舍见 [ADR-0008](adr/0008-deploy-cloudflare-turso.md)。本文是一次性落地的操作步骤。
 
 ## 前置

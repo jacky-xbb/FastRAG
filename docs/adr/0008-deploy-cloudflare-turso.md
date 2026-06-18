@@ -2,7 +2,9 @@
 
 ## 状态
 
-已采纳（2026-06-17）。把原本「本地 Node 全栈」改为「Cloudflare Workers 托管」，libSQL 由本地 `file:./vector.db` 换成 Turso 托管。
+**Superseded（2026-06-18）**：Cloudflare 部署已弃用，由 [ADR-0010](0010-deploy-fly-local-volume.md) 的 fly.io 单轨取代。本文保留作历史决策记录。
+
+~~已采纳（2026-06-17）。把原本「本地 Node 全栈」改为「Cloudflare Workers 托管」，libSQL 由本地 `file:./vector.db` 换成 Turso 托管。~~
 
 ## 背景
 

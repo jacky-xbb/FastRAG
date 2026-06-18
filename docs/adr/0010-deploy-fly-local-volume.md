@@ -1,8 +1,8 @@
-# 增加 fly.io 部署路径（常驻 Node 进程 + 本地卷 libSQL），与 Cloudflare 双轨并存
+# fly.io 部署（常驻 Node 进程 + 本地卷 libSQL）——唯一部署方案
 
 ## 状态
 
-已采纳（2026-06-17）。在 [ADR-0008](0008-deploy-cloudflare-turso.md) 的 Cloudflare 部署之外，**新增**一条 fly.io 部署路径，两条并存（双轨），不互相替代。
+已采纳（2026-06-17）。最初在 [ADR-0008](0008-deploy-cloudflare-turso.md) 的 Cloudflare 部署之外新增一条 fly.io 路径（双轨并存）。**2026-06-18 起 Cloudflare 退役，fly.io 成为本项目唯一部署方案**（ADR-0008 superseded）。
 
 ## 背景
 
