@@ -89,7 +89,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <div className="flex items-center gap-2 px-1 py-1 font-semibold">
           <Logo className="text-emerald-400" size={22} />
-          <span className="font-mono tracking-tight">fastrag</span>
+          <span className="font-mono tracking-tight">FastRAG</span>
         </div>
         {/* 主导航：检索台 / 入库 分段切换（取代原顶栏 tab，入库不再被误当内容切换）。 */}
         <div className="grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/50 p-1">
@@ -157,13 +157,10 @@ export function AppSidebar() {
                     <span>{d.pages}p</span>
                     <span>·</span>
                     <span>{d.chunks} chunks</span>
-                    <span
-                      className={`ml-auto rounded px-1.5 ${
-                        d.status === '废止' ? 'bg-sidebar-accent text-sidebar-foreground/50' : 'bg-emerald-500/15 text-emerald-400'
-                      }`}
-                    >
-                      {d.status}
-                    </span>
+                    {/* 只给例外项打标：20/21 都是「现行」，绿标纯噪音；仅「废止」灰标，让唯一作废的一眼可见。 */}
+                    {d.status === '废止' && (
+                      <span className="ml-auto rounded bg-sidebar-accent px-1.5 text-sidebar-foreground/50">已废止</span>
+                    )}
                   </div>
                 </div>
               ))}

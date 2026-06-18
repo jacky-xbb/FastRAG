@@ -27,14 +27,19 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-screen grid-cols-1 bg-zinc-950 text-zinc-200 md:grid-cols-2">
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-emerald-900/40 to-zinc-900 p-10 md:flex">
+      <div className="relative hidden flex-col overflow-hidden bg-gradient-to-br from-emerald-900/40 to-zinc-900 p-10 md:flex">
         <div className="flex items-center gap-2 font-semibold">
           <Logo className="text-emerald-400" size={26} />
-          <span className="font-mono tracking-tight">fastrag</span>
+          <span className="font-mono tracking-tight">FastRAG</span>
         </div>
-        <div>
-          <h1 className="text-3xl font-semibold leading-snug text-zinc-50">防水卷材国标<br />检索工作台</h1>
-          <p className="mt-3 max-w-sm text-sm text-zinc-400">混合检索（向量 + BM25 + 元数据过滤），指标行级命中，逐条标注标准号与页码。</p>
+        <div className="flex flex-1 items-center">
+          <div>
+            <div className="mb-5 h-1 w-12 rounded-full bg-emerald-400" />
+            <h1 className="text-[2.75rem] font-bold leading-[1.12] tracking-tight text-zinc-50">
+              防水卷材<span className="text-emerald-400">国标</span>
+              <br />检索工作台
+            </h1>
+          </div>
         </div>
       </div>
       <div className="grid place-items-center p-8">
