@@ -1,4 +1,4 @@
-# fastrag — 防水卷材国标问答知识库
+# FastRAG — 防水卷材国标问答知识库
 
 导入防水卷材类国标/行标 PDF，OCR 切块入库，混合检索后由 Agent 标来源作答，库内查不到走联网兜底。
 约束与术语见 [CLAUDE.md](CLAUDE.md) / [CONTEXT.md](CONTEXT.md)，决策见 [docs/adr/](docs/adr/)，高层结构见 [docs/架构文档.md](docs/架构文档.md)。
@@ -41,22 +41,21 @@ flowchart LR
 
 ## RAG：切片 / 向量化 / 检索
 
-**切片**（`src/lib/indicator-chunk.ts`，[ADR-0004](docs/adr/0004-indicator-chunking-hybrid-retrieval.md)）
+**切片**（[ADR-0004](docs/adr/0004-indicator-chunking-hybrid-retrieval.md)）
 
-- OCR 出的指标表是带 `rowspan/colspan` 的 HTML `<table>`，整块嵌入会冲淡向量。先「解析网格 + LaTeX 单位归一化 + `\n` 清洗」，再**按指标行切块**。
-- 每块前缀 = `标准号 + 产品名 + 表名 + 指标名` 作语义锚点（产品名从文件名提取，用户用产品名问也召得回），裸数字带着列头进向量空间。
-- 表外正文走定长字符切块（`src/lib/chunk.ts`）。每块都挂元数据 `{标准号, 表名, 指标名, 页码, 状态, fileName}`，答案能标来源。
+- OCR 出的指标表是带合并单元格的表格，整块嵌入会冲淡向量。先解析网格、归一化单位、清洗换行，再**按指标行切块**。
+- 每块前缀 = 标准号 + 产品名 + 表名 + 指标名 作语义锚点（产品名从文件名提取，用户用产品名问也召得回），裸数字带着列头进向量空间。
+- 表外正文走定长字符切块。每块都挂元数据（标准号 / 表名 / 指标名 / 页码 / 状态 / 文件名），答案能标来源。
 
 **向量化**
 
-- 入库与检索锁同一个 embedding 模型 `text-embedding-3-small`（向量空间一致），经 OpenRouter `embedMany` 后 `upsert` 到 libSQL 向量索引 `standards`。
+- 入库与检索锁同一个 embedding 模型（向量空间一致），经 OpenRouter 向量化后写入 libSQL 向量索引。
 
-**检索**（`src/lib/{retrieve,hybrid,bm25}.ts`）
+**检索**
 
-- **向量 + BM25 混合**：向量召回（暴力扫 `vector_distance_cos`，over-fetch 40）与 BM25 关键词召回（40）各出一路，用 **RRF**（`k=60`）融合后取 `topK=6`。
-- **BM25 分词**：ASCII 按字母段/数字段成词、CJK 切相邻二元（bigram），故 `jc684`、`328.18` 也能对上库里空格写法 `JC 684-1997`。
-- **元数据过滤**在内存里做（中文 key 在 libSQL filter 会报错），按 `{标准号, 表名, 指标名, 页码}` 收窄；两道护栏：过滤命中为空时自动回退裸召回，标准号归一化匹配（`jc684` ↔ `JC 684-1997`）。
-- 废止标准当**普通文档**处理（[ADR-0005](docs/adr/0005-deprecated-as-normal.md)）。
+- **向量 + BM25 混合**：向量召回与 BM25 关键词召回各出一路，用 RRF 融合后取前若干条。
+- **BM25 分词**：英文按字母段 / 数字段成词、中文切相邻二元，故「jc684」「328.18」也能对上库里空格写法「JC 684-1997」。
+- **元数据过滤**在内存里做，按 标准号 / 表名 / 指标名 / 页码 收窄；两道护栏：过滤命中为空时自动回退裸召回，标准号归一化匹配（jc684 ↔ JC 684-1997）。
 
 ## 本地部署
 
